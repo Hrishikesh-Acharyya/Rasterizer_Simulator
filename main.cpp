@@ -15,7 +15,7 @@ static const int no_of_pixels =   VIEWPORT_HEIGHT*VIEWPORT_WIDTH;
 Returns the edge function given the triangle 
 */
 float edge_function(float ax, float ay, float bx, float by, float cx, float cy) {
-    return (cx - ax) * (by - ay) - (cy - ay) * (bx - ax);
+     return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
 }
 
 /*
@@ -84,11 +84,16 @@ int main() {
       float a_x = 150.0f, a_y = 100.0f;
       float b_x = 620.0f, b_y = 220.0f;
       float c_x = 300.0f, c_y = 500.0f;
-    
+
+      //Assign a color to each vertex
+      RGB colorA = {uint8_t(255), uint8_t(0), uint8_t(0)}; //red
+      RGB colorB = {uint8_t(0), uint8_t(255), uint8_t(0)}; //green
+      RGB colorC = {uint8_t(0), uint8_t(0), uint8_t(255)}; //blue
 
       int min_x, min_y, max_x, max_y;
       
       bounding_box(a_x, a_y, b_x, b_y, c_x, c_y, min_x, min_y, max_x, max_y);
+      float area = edge_function(a_x, a_y, b_x, b_y, c_x, c_y); //Area of the parallelogram (x2 area of ABC)
 
       for (int y = min_y; y <= max_y; ++y)
       {
@@ -98,8 +103,20 @@ int main() {
           float w1 = edge_function(c_x, c_y, a_x, a_y, x+0.5f, y+0.5f);
           float w2 = edge_function(a_x, a_y, b_x, b_y, x+0.5f, y+0.5f);
 
-          if (w0*w1*w2 <=0) { //>= 0 if the multiplication order changed (cross product order matters)
-              framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(255), uint8_t(0), uint8_t(0)}; //red color for triangle
+          bool inside = (w0 >= 0 && w1 >= 0 && w2 >= 0) ||
+              (w0 <= 0 && w1 <= 0 && w2 <= 0);
+
+          if (inside) { // cross product order matters
+              w0 = w0 / area; //wo,w1,w2 are also x2 areas of the subtriangles respectively
+              w1 = w1 / area;
+              w2 = w2 / area;
+
+              //wo,w1,w2 now form the barycentric coordinates of the pixel (x,y) with respect to the triangle ABC   
+
+            //Barycentric interpolation of the color of the pixel (x,y) using the barycentric coordinates and the colors of the vertices              
+              framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(w0 * colorA.r + w1 * colorB.r + w2 * colorC.r),
+                                                      uint8_t(w0 * colorA.g + w1 * colorB.g + w2 * colorC.g),
+                                                      uint8_t(w0 * colorA.b + w1 * colorB.b + w2 * colorC.b)}; //interpolated color for triangle
           }
         }
       }

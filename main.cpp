@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <cstdio>
 #include <algorithm>
 #include <string>
@@ -46,6 +47,7 @@ uint8_t b;
 static_assert(sizeof(RGB) == 3, "RGB must be tightly packed");
 
 vector<RGB> framebuffer(no_of_pixels);//Each RGB struct is one pixel
+vector<float> zbuffer(no_of_pixels, std::numeric_limits<float>::infinity()); //Initialize z-buffer to infinity
 
 int main() {
 
@@ -77,7 +79,7 @@ int main() {
 
       for (int y = 0; y < VIEWPORT_HEIGHT; ++y) {
           for (int x = 0; x < VIEWPORT_WIDTH; ++x) {
-            framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(125), uint8_t(125), uint8_t(125)}; //blue color map generation
+            framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(125), uint8_t(125), uint8_t(125)}; //grey color map generation
           }
       }
 
@@ -132,6 +134,118 @@ int main() {
       fprintf(g, "P6\n%d %d\n255\n", VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
       fwrite(reinterpret_cast<const char*>(framebuffer.data()), sizeof(RGB), no_of_pixels, g);
       fclose(g);
+
+    for (int y = 0; y < VIEWPORT_HEIGHT; ++y) {
+          for (int x = 0; x < VIEWPORT_WIDTH; ++x) {
+            framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(125), uint8_t(125), uint8_t(125)}; //grey color map generation
+          }
+      }
+
+      float a1_x = 150.0f, a1_y = 100.0f;
+      float b1_x = 620.0f, b1_y = 220.0f;
+      float c1_x = 300.0f, c1_y = 500.0f;
+      float za1 = 0.3f, zb1 = 0.3f, zc1 = 0.3f; //Depth values for the triangle vertices
+      
+      float a2_x = 300.0f, a2_y = 150.0f;
+      float b2_x = 470.0f, b2_y = 370.0f;
+      float c2_x = 150.0f, c2_y = 450.0f;
+      float za2 = 0.6f, zb2 = 0.6f, zc2 = 0.6f; //Depth values for the second triangle vertices
+
+      RGB colorA1 = {uint8_t(255), uint8_t(0), uint8_t(0)}; //red
+      RGB colorB1 = {uint8_t(255), uint8_t(0), uint8_t(0)}; //red
+      RGB colorC1 = {uint8_t(255), uint8_t(0), uint8_t(0)}; //red
+      
+      RGB colorA2 = {uint8_t(0), uint8_t(0), uint8_t(255)}; //blue
+      RGB colorB2 = {uint8_t(0), uint8_t(0), uint8_t(255)}; //blue
+      RGB colorC2 = {uint8_t(0), uint8_t(0), uint8_t(255)}; //blue
+
+      int min_x1, min_y1, max_x1, max_y1;
+      int min_x2, min_y2, max_x2, max_y2;
+      bounding_box(a1_x, a1_y, b1_x, b1_y, c1_x, c1_y, min_x1, min_y1, max_x1, max_y1);
+      bounding_box(a2_x, a2_y, b2_x, b2_y, c2_x, c2_y, min_x2, min_y2, max_x2, max_y2);
+      float area1 = edge_function(a1_x, a1_y, b1_x, b1_y, c1_x, c1_y); //Area of the parallelogram (x2 area of ABC)
+      float area2 = edge_function(a2_x, a2_y, b2_x, b2_y, c2_x, c2_y); //Area of the parallelogram (x2 area of ABC)
+
+
+      for (int y = min_y1; y <= max_y1; ++y)
+      {
+        for (int x = min_x1; x <= max_x1; ++x)
+        {
+          float w0 = edge_function(b1_x, b1_y, c1_x, c1_y, x+0.5f, y+0.5f); //+0.5f to sample at pixel center
+          float w1 = edge_function(c1_x, c1_y, a1_x, a1_y, x+0.5f, y+0.5f);
+          float w2 = edge_function(a1_x, a1_y, b1_x, b1_y, x+0.5f, y+0.5f);
+
+          bool inside = (w0 >= 0 && w1 >= 0 && w2 >= 0) ||
+              (w0 <= 0 && w1 <= 0 && w2 <= 0);
+
+          if (inside) { // cross product order matters
+             w0 = w0 / area1; //wo,w1,w2 are also x2 areas of the subtriangles respectively
+              w1 = w1 / area1;
+              w2 = w2 / area1;
+            float z = w0 * za1 + w1 * zb1 + w2 * zc1; //Interpolate the depth value for the pixel (x,y) using barycentric coordinates
+            if(z<zbuffer[y * VIEWPORT_WIDTH + x]){ //Depth test
+              zbuffer[y * VIEWPORT_WIDTH + x] = z; //Update the z-buffer
+             
+
+              //wo,w1,w2 now form the barycentric coordinates of the pixel (x,y) with respect to the triangle ABC   
+            
+            //Barycentric interpolation of the color of the pixel (x,y) using the barycentric coordinates and the colors of the vertices              
+              framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(w0 * colorA1.r + w1 * colorB1.r + w2 * colorC1.r),
+                                                      uint8_t(w0 * colorA1.g + w1 * colorB1.g + w2 * colorC1.g),
+                                                      uint8_t(w0 * colorA1.b + w1 * colorB1.b + w2 * colorC1   .b)}; //interpolated color for triangle
+
+              }
+                                }
+        }
+      }
+      
+
+
+      for (int y = min_y2; y <= max_y2; ++y)
+      {
+        for (int x = min_x2; x <= max_x2; ++x)
+        {
+          float w0 = edge_function(b2_x, b2_y, c2_x, c2_y, x+0.5f, y+0.5f); //+0.5f to sample at pixel center
+          float w1 = edge_function(c2_x, c2_y, a2_x, a2_y, x+0.5f, y+0.5f);
+          float w2 = edge_function(a2_x, a2_y, b2_x, b2_y, x+0.5f, y+0.5f);
+
+          bool inside = (w0 >= 0 && w1 >= 0 && w2 >= 0) ||
+              (w0 <= 0 && w1 <= 0 && w2 <= 0);
+
+          if (inside) { // cross product order matters
+
+            w0 = w0 / area2; //wo,w1,w2 are also x2 areas of the subtriangles respectively
+              w1 = w1 / area2;
+              w2 = w2 / area2;
+            float z = w0 * za2 + w1 * zb2 + w2 * zc2; //Interpolate the depth value for the pixel (x,y) using barycentric coordinates
+            if(z<zbuffer[y * VIEWPORT_WIDTH + x]){ //Depth test
+              zbuffer[y * VIEWPORT_WIDTH + x] = z; //Update the z-buffer
+              
+
+              //wo,w1,w2 now form the barycentric coordinates of the pixel (x,y) with respect to the triangle ABC   
+            
+            //Barycentric interpolation of the color of the pixel (x,y) using the barycentric coordinates and the colors of the vertices              
+              framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(w0 * colorA2.r + w1 * colorB2.r + w2 * colorC2.r),
+                                                      uint8_t(w0 * colorA2.g + w1 * colorB2.g + w2 * colorC2.g),
+                                                      uint8_t(w0 * colorA2.b + w1 * colorB2.b + w2 * colorC2   .b)}; //interpolated color for triangle
+
+              }
+                                }
+        }
+      }
+
+          FILE* h = std::fopen("Overlappingtriangle.ppm", "wb");
+    if (h == nullptr) {
+        cout << "Error: Could not open triangle.ppm for writing." <<endl;
+        return 1;
+    }
+
+    
+
+      fprintf(h, "P6\n%d %d\n255\n", VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
+      fwrite(reinterpret_cast<const char*>(framebuffer.data()), sizeof(RGB), no_of_pixels, h);
+      fclose(h);
+
 
       return 0;
 }

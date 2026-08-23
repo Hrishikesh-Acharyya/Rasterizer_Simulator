@@ -8,9 +8,14 @@
 #include <vector>
 using namespace std;
 
+#define PI 3.14159265358979f
+
+
 static const int VIEWPORT_WIDTH  = 800;
 static const int VIEWPORT_HEIGHT = 600;
 static const int no_of_pixels =   VIEWPORT_HEIGHT*VIEWPORT_WIDTH; 
+static const float FOV = 90;
+
 
 /*
 Returns the edge function given the triangle 
@@ -46,12 +51,86 @@ uint8_t b;
 };
 static_assert(sizeof(RGB) == 3, "RGB must be tightly packed");
 
+struct Vec3 { float x,y,z; };
+struct Vec4 { float x,y,z,w; };
+struct Mat4 { float m[4][4]; };
+
+
 vector<RGB> framebuffer(no_of_pixels);//Each RGB struct is one pixel
 vector<float> zbuffer(no_of_pixels, std::numeric_limits<float>::infinity()); //Initialize z-buffer to infinity
 
+Mat4 multiply(const Mat4& a, const Mat4& b) {
+    Mat4 result;
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            result.m[i][j] = 0.0f;
+            for (int k = 0; k < 4; ++k) {
+                result.m[i][j] += a.m[i][k] * b.m[k][j];
+            }
+        }
+    }
+    return result;
+}
+
+Vec4 transform(const Mat4& mat, const Vec4& vec) {
+    Vec4 result;
+    result.x = mat.m[0][0] * vec.x + mat.m[0][1] * vec.y + mat.m[0][2] * vec.z + mat.m[0][3] * vec.w;
+    result.y = mat.m[1][0] * vec.x + mat.m[1][1] * vec.y + mat.m[1][2] * vec.z + mat.m[1][3] * vec.w;
+    result.z = mat.m[2][0] * vec.x + mat.m[2][1] * vec.y + mat.m[2][2] * vec.z + mat.m[2][3] * vec.w;
+    result.w = mat.m[3][0] * vec.x + mat.m[3][1] * vec.y + mat.m[3][2] * vec.z + mat.m[3][3] * vec.w;
+    return result;
+}
+void printMatrix(const Mat4& mat) {
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            cout << mat.m[i][j] << " ";
+        }
+        cout << endl;
+    }
+}
+
+void printVector_Vec4(const Vec4& vec) {
+    cout << "(" << vec.x << ", " << vec.y << ", " << vec.z << ", " << vec.w << ")" << endl;
+}
+
+void printVector_Vec3(const Vec3& vec) {
+    cout << "(" << vec.x << ", " << vec.y << ", " << vec.z << ")" << endl;
+}
+
+void buildPerspectiveMatrix(Mat4& perspectiveMatrix, float fov, float aspectRatio, float nearPlane, float farPlane) {
+    float t = 1.0f / tan(fov / 2.0f);
+
+    for (int i = 0; i<4; ++i) {
+        for (int j = 0; j<4; ++j) {
+            perspectiveMatrix.m[i][j] = 0.0f;
+        }
+    }
+
+    perspectiveMatrix.m[0][0] = t / aspectRatio;
+    perspectiveMatrix.m[1][1] = t;
+    perspectiveMatrix.m[2][2] = -(farPlane + nearPlane) / (farPlane - nearPlane);
+    perspectiveMatrix.m[2][3] = -(2.0f * farPlane * nearPlane) / (farPlane - nearPlane);
+    perspectiveMatrix.m[3][2] = -1.0f;
+}
+Vec3 perspectiveTransform(const Vec4& vertex, const Mat4& m) {
+    Vec4 clip = transform(m, vertex);
+    float inv_w = (std::fabs(clip.w) > 1e-8f) ? 1.0f / clip.w : 0.0f;
+    return { clip.x * inv_w, clip.y * inv_w, clip.z * inv_w };
+}
+
 int main() {
 
+   Mat4 perspectiveMatrix;
+   buildPerspectiveMatrix(perspectiveMatrix, FOV * (PI / 180.0f), float(VIEWPORT_WIDTH) / float(VIEWPORT_HEIGHT), 0.1f, 100.0f);
+   Vec4 vertex1 = {1.0f,0.0f,-5.0f,1.0f};
+   Vec4 vertex2 = {1.0f,0.0f,-10.0f,1.0f};
+   Vec3 vertex1_ndc = perspectiveTransform(vertex1, perspectiveMatrix);
+   Vec3 vertex2_ndc = perspectiveTransform(vertex2, perspectiveMatrix);
+
+   printVector_Vec3(vertex1_ndc);
+    printVector_Vec3(vertex2_ndc);
   
+
     for (int y = 0; y < VIEWPORT_HEIGHT; ++y) {
         for (int x = 0; x < VIEWPORT_WIDTH; ++x) {
             framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(x % 256), uint8_t(y % 256), 0}; //red-green color map generation

@@ -383,7 +383,7 @@ int main() {
 
 vector<Vec4> obj_verts;
 vector<int> obj_indices;
-if (!loadOBJ("icosphere.obj", obj_verts, obj_indices)) {
+if (!loadOBJ("torus.obj", obj_verts, obj_indices)) {
     return 1; // Exit if the OBJ file could not be loaded
 }
 vector<screenVertex> screen_verts(obj_verts.size()); //To store the transformed vertices in screen space

@@ -1,7 +1,7 @@
 
 # build output
 *.exe
-*.obj
+*.o
 
 # render output
 *.ppm

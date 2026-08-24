@@ -327,6 +327,30 @@ vector<float> normalizationPass(const std::vector<Vec4>& obj_verts)
 
     return data;
 }
+
+Vec3 subVec3(const Vec3& a, const Vec3& b) {
+    return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+
+Vec3 crossVec3(const Vec3& a, const Vec3& b) {
+    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+}
+
+float dotVec3(const Vec3& a, const Vec3& b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+Vec3 normalizeVec3(Vec3 v) {
+    float length = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    if (length > 1e-8f) {
+        v.x /= length;
+        v.y /= length;
+        v.z /= length;
+    }
+    return v;
+}
+
+
 int main() {
 
 //   /*Cube vertices*/
@@ -363,6 +387,7 @@ if (!loadOBJ("icosphere.obj", obj_verts, obj_indices)) {
     return 1; // Exit if the OBJ file could not be loaded
 }
 vector<screenVertex> screen_verts(obj_verts.size()); //To store the transformed vertices in screen space
+vector<Vec4> world_verts(obj_verts.size());
 vector<float> normalization_data = normalizationPass(obj_verts);
 
 float centre_x = (normalization_data[0] + normalization_data[3]) / 2.0f;
@@ -405,7 +430,7 @@ buildScalingMatrix(scaleM, s, s, s);
 Mat4 normalise = multiply(scaleM, centreM);
 
 Mat4 view = { {{1,0,0,0},{0,1,0,0},{0,0,1,-4},{0,0,0,1}} };
-
+Vec3 lightDir = normalizeVec3({1.0f, 1.0f, 1.0f}); //pointing towards camera instead of away to make calculations less messy
 for(int frame = 0; frame < 120; ++frame) {
     clearframeBuffer();
     clearZBuffer();
@@ -421,6 +446,7 @@ for(int frame = 0; frame < 120; ++frame) {
     Mat4 mvp = multiply(perspectiveMatrix, multiply(view, model));
 
     for (size_t i = 0; i < obj_verts.size(); ++i) {
+        world_verts[i] = transform(model, obj_verts[i]);
         Vec3 transformed = perspectiveTransform(obj_verts[i], mvp);
         screen_verts[i] = { (transformed.x + 1.0f) * 0.5f * VIEWPORT_WIDTH,
                             (1.0f - (transformed.y + 1.0f) * 0.5f) * VIEWPORT_HEIGHT,
@@ -429,9 +455,27 @@ for(int frame = 0; frame < 120; ++frame) {
     }
 
     for (size_t i = 0; i < obj_indices.size(); i += 3) {
-        const screenVertex& A = screen_verts[obj_indices[i]];
-        const screenVertex& B = screen_verts[obj_indices[i + 1]];
-        const screenVertex& C = screen_verts[obj_indices[i + 2]];
+        screenVertex A = screen_verts[obj_indices[i]];
+        screenVertex B = screen_verts[obj_indices[i + 1]];
+        screenVertex C = screen_verts[obj_indices[i + 2]];
+        Vec3 Va = {world_verts[obj_indices[i]].x, world_verts[obj_indices[i]].y, world_verts[obj_indices[i]].z};
+        Vec3 Vb = {world_verts[obj_indices[i + 1]].x, world_verts[obj_indices[i + 1]].y, world_verts[obj_indices[i + 1]].z};
+        Vec3 Vc = {world_verts[obj_indices[i + 2]].x, world_verts[obj_indices[i + 2]].y, world_verts[obj_indices[i + 2]].z};
+        Vec3 edge1 = subVec3(Vb, Va);
+        Vec3 edge2 = subVec3(Vc, Va);
+        Vec3 faceNormal = normalizeVec3(crossVec3(edge1, edge2));
+        float intensity = 0.2f + 0.8f * std::max(0.0f, dotVec3(faceNormal, lightDir));
+        A.color = { uint8_t(A.color.r * intensity),
+                    uint8_t(A.color.g * intensity),
+                    uint8_t(A.color.b * intensity) };
+                
+        B.color = { uint8_t(B.color.r * intensity),
+                    uint8_t(B.color.g * intensity),
+                    uint8_t(B.color.b * intensity) };
+        C.color = { uint8_t(C.color.r * intensity),
+                    uint8_t(C.color.g * intensity),
+                    uint8_t(C.color.b * intensity) };
+
         drawTriangle(A, B, C);
     }
 

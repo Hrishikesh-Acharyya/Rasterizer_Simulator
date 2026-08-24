@@ -153,5 +153,3 @@ fragment work is embarrassingly parallel, how SIMD lanes map onto pixel quads,
 what a warp is, why memory bandwidth and not arithmetic is the wall, and how the
 z-buffer and framebuffer become concrete memory hierarchy problems.
 
-That is the reading track this repo feeds into — Hennessy and Patterson, and the
-chapters on data-level parallelism and GPU architecture in particular.

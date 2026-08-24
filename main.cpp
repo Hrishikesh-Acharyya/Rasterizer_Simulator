@@ -6,13 +6,15 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <fstream>
+#include <sstream>
 using namespace std;
 
 #define PI 3.14159265358979f
 
 
-static const int VIEWPORT_WIDTH  = 3840;
-static const int VIEWPORT_HEIGHT = 2160;
+static const int VIEWPORT_WIDTH  = 1920;
+static const int VIEWPORT_HEIGHT = 1080;
 static const int no_of_pixels =   VIEWPORT_HEIGHT*VIEWPORT_WIDTH; 
 static const float FOV = 60;
 
@@ -192,6 +194,25 @@ void buildRotationMatrix_z(Mat4& rotationMatrix, float angle) {
     rotationMatrix.m[3][0] = 0;  rotationMatrix.m[3][1] = 0;  rotationMatrix.m[3][2] = 0;  rotationMatrix.m[3][3] = 1;
 }
 
+void buildTranslationMatrix(Mat4& m, float tx, float ty, float tz)
+{
+    
+    m.m[0][0] = 1; m.m[0][1] = 0; m.m[0][2] = 0; m.m[0][3] = tx;
+    m.m[1][0] = 0; m.m[1][1] = 1; m.m[1][2] = 0; m.m[1][3] = ty;
+    m.m[2][0] = 0; m.m[2][1] = 0; m.m[2][2] = 1; m.m[2][3] = tz;
+    m.m[3][0] = 0; m.m[3][1] = 0; m.m[3][2] = 0; m.m[3][3] = 1;
+
+}
+
+void buildScalingMatrix(Mat4& m, float sx, float sy, float sz)
+{
+    m.m[0][0] = sx; m.m[0][1] = 0;  m.m[0][2] = 0;  m.m[0][3] = 0;
+    m.m[1][0] = 0;  m.m[1][1] = sy; m.m[1][2] = 0;  m.m[1][3] = 0;
+    m.m[2][0] = 0;  m.m[2][1] = 0;  m.m[2][2] = sz; m.m[2][3] = 0;
+    m.m[3][0] = 0;  m.m[3][1] = 0;  m.m[3][2] = 0;  m.m[3][3] = 1;
+}
+    
+
 void clearframeBuffer() {
     for (int y = 0; y < VIEWPORT_HEIGHT; ++y) {
         for (int x = 0; x < VIEWPORT_WIDTH; ++x) {
@@ -218,77 +239,207 @@ void writeFramebufferToPPM(const std::string& filename) {
     fwrite(reinterpret_cast<const char*>(framebuffer.data()), sizeof(RGB), no_of_pixels, f);
     fclose(f);
 }
+
+/*
+Loads an OBJ file into a vertex list and a flat index list.
+Only 'v' and 'f' lines are used; vt/vn/usemtl/o/g/s/# are skipped.
+OBJ indices are 1-based, so 1 is subtracted on the way in.
+Face tokens may be "5", "5/2", "5//3" or "5/2/3" -- only the part
+before the first '/' is the vertex index.
+Faces with more than 3 vertices are fan-triangulated.
+*/
+bool loadOBJ(const std::string& path,
+             std::vector<Vec4>& out_verts,
+             std::vector<int>&  out_indices)
+{
+    std::ifstream file(path);
+    if (!file) {
+        cout << "Error: could not open " << path << endl;
+        return false;
+    }
+
+    out_verts.clear();
+    out_indices.clear();
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::istringstream ss(line);
+        std::string tag;
+        ss >> tag;
+
+        if (tag == "v") {
+            float x, y, z;
+            ss >> x >> y >> z;
+            out_verts.push_back({x, y, z, 1.0f});
+        }
+        else if (tag == "f") {
+            std::vector<int> face;          // indices for this one face
+            std::string token;
+            while (ss >> token) {
+                size_t slash = token.find('/');
+                if (slash != std::string::npos)
+                    token = token.substr(0, slash);   // keep only "5" from "5/2/3"
+                face.push_back(std::stoi(token) - 1); // OBJ is 1-based
+            }
+            // fan-triangulate: (0,1,2), (0,2,3), (0,3,4) ...
+            for (size_t i = 1; i + 1 < face.size(); ++i) {
+                out_indices.push_back(face[0]);
+                out_indices.push_back(face[i]);
+                out_indices.push_back(face[i + 1]);
+            }
+        }
+        // everything else ignored
+    }
+
+    cout << "Loaded " << out_verts.size() << " vertices, "
+         << out_indices.size() / 3 << " triangles" << endl;
+    return true;
+}
+
+
+
+vector<float> normalizationPass(const std::vector<Vec4>& obj_verts)
+{
+    vector<float> data;
+    float min_x = std::numeric_limits<float>::max();
+    float min_y = std::numeric_limits<float>::max();
+    float min_z = std::numeric_limits<float>::max();
+    float max_x = std::numeric_limits<float>::lowest();
+    float max_y = std::numeric_limits<float>::lowest();
+    float max_z = std::numeric_limits<float>::lowest();
+
+    for (int i = 0; i<obj_verts.size(); ++i) {
+        min_x = std::min(min_x, static_cast<float>(obj_verts[i].x));
+        min_y = std::min(min_y, static_cast<float>(obj_verts[i].y));
+        min_z = std::min(min_z, static_cast<float>(obj_verts[i].z));
+
+        max_x = std::max(max_x, static_cast<float>(obj_verts[i].x));
+        max_y = std::max(max_y, static_cast<float>(obj_verts[i].y));
+        max_z = std::max(max_z, static_cast<float>(obj_verts[i].z));
+    }
+
+    data.push_back(min_x);
+    data.push_back(min_y);
+    data.push_back(min_z);
+    data.push_back(max_x);
+    data.push_back(max_y);
+    data.push_back(max_z);
+
+    return data;
+}
 int main() {
 
-  /*Cube vertices*/
-  Vec4 cube_verts[8] = {
-    {-1,-1,-1,1}, { 1,-1,-1,1}, { 1, 1,-1,1}, {-1, 1,-1,1},  // 0-3: back  z=-1
-    {-1,-1, 1,1}, { 1,-1, 1,1}, { 1, 1, 1,1}, {-1, 1, 1,1}   // 4-7: front z=+1
-};
+//   /*Cube vertices*/
+//   vector<Vec4> cube_verts = {
+//     {-1,-1,-1,1}, { 1,-1,-1,1}, { 1, 1,-1,1}, {-1, 1,-1,1},  // 0-3: back  z=-1
+//     {-1,-1, 1,1}, { 1,-1, 1,1}, { 1, 1, 1,1}, {-1, 1, 1,1}   // 4-7: front z=+1
+// };
 
-/*indices of the vertex that make up the faces of the cube as triangles. The indices represent the vertex number in cube_verts
-  Direction of vertices chosen such that it follows outward normal nomenclature for a closed solid 
-*/
-int cube_indices[36] = 
+//  vector<screenVertex> screen_verts(cube_verts.size()); //To store the transformed vertices in screen space
+
+// /*indices of the vertex that make up the faces of the cube as triangles. The indices represent the vertex number in cube_verts
+//   Direction of vertices chosen such that it follows outward normal nomenclature for a closed solid 
+// */
+// vector<int> cube_indices = 
+// {
+
+//     2,1,0, 0,3,2, //z = -1 face
+//     4,5,6, 6,7,4, //z = +1 face
+//     7,6,2, 2,3,7, //y = +1 face
+//     1,5,4, 4,0,1, //y = -1 face
+//     1,2,6, 6,5,1, //x = +1 face
+//     7,3,0, 0,4,7  //x = -1 face
+
+// };
+
+// vector<RGB> cube_colors = {
+//     {255,0,0}, {0,255,0}, {0,0,255}, {255,255,0},
+//     {255,0,255}, {0,255,255}, {255,128,0}, {128,0,255}
+// };
+
+vector<Vec4> obj_verts;
+vector<int> obj_indices;
+if (!loadOBJ("test.obj", obj_verts, obj_indices)) {
+    return 1; // Exit if the OBJ file could not be loaded
+}
+vector<screenVertex> screen_verts(obj_verts.size()); //To store the transformed vertices in screen space
+vector<float> normalization_data = normalizationPass(obj_verts);
+
+float centre_x = (normalization_data[0] + normalization_data[3]) / 2.0f;
+float centre_y = (normalization_data[1] + normalization_data[4]) / 2.0f;
+float centre_z = (normalization_data[2] + normalization_data[5]) / 2.0f;
+float extent = std::max({normalization_data[3] - normalization_data[0], normalization_data[4] - normalization_data[1], normalization_data[5] - normalization_data[2]});
+
+
+vector<RGB> obj_colors(obj_verts.size());
 {
+    float min_x = normalization_data[0], max_x = normalization_data[3];
+    float min_y = normalization_data[1], max_y = normalization_data[4];
+    float min_z = normalization_data[2], max_z = normalization_data[5];
 
-    2,1,0, 0,3,2, //z = -1 face
-    4,5,6, 6,7,4, //z = +1 face
-    7,6,2, 2,3,7, //y = +1 face
-    1,5,4, 4,0,1, //y = -1 face
-    1,2,6, 6,5,1, //x = +1 face
-    7,3,0, 0,4,7  //x = -1 face
+    float range_x = max_x - min_x;
+    float range_y = max_y - min_y;
+    float range_z = max_z - min_z;
 
-};
+    for (size_t i = 0; i < obj_verts.size(); ++i) {
+        // map each axis onto 0..1 across the model's bounding box,
+        // falling back to 0.5 when the model is flat on that axis
+        float fx = (range_x > 1e-8f) ? (obj_verts[i].x - min_x) / range_x : 0.5f;
+        float fy = (range_y > 1e-8f) ? (obj_verts[i].y - min_y) / range_y : 0.5f;
+        float fz = (range_z > 1e-8f) ? (obj_verts[i].z - min_z) / range_z : 0.5f;
 
-RGB cube_colors[8] = {
-    {255,0,0}, {0,255,0}, {0,0,255}, {255,255,0},
-    {255,0,255}, {0,255,255}, {255,128,0}, {128,0,255}
-};
- Mat4 perspectiveMatrix;
+        obj_colors[i] = { uint8_t(fx * 255.0f),
+                          uint8_t(fy * 255.0f),
+                          uint8_t(fz * 255.0f) };
+    }
+}
+
+Mat4 perspectiveMatrix;
 
 buildPerspectiveMatrix(perspectiveMatrix, FOV * (PI / 180.0f), float(VIEWPORT_WIDTH) / float(VIEWPORT_HEIGHT), 0.1f, 100.0f);
 
-Mat4 view = { {{1,0,0,0},{0,1,0,0},{0,0,1,-4},{0,0,0,1}} }; //pushes cube 4 unit down into -z
+Mat4 centreM, scaleM;
+buildTranslationMatrix(centreM, -centre_x, -centre_y, -centre_z);
+float s = 2.0f/extent;
+buildScalingMatrix(scaleM, s, s, s);
+Mat4 normalise = multiply(scaleM, centreM);
 
-for(int frame = 0; frame <120; ++frame) {
+Mat4 view = { {{1,0,0,0},{0,1,0,0},{0,0,1,-4},{0,0,0,1}} };
+
+for(int frame = 0; frame < 120; ++frame) {
     clearframeBuffer();
     clearZBuffer();
-    float x_angle = PI/4;
-    float y_angle = frame * (PI / 60.0f); //Rotate 3 degrees per frame
-    float z_angle = PI/6;
-    Mat4 rotate_x, rotate_y, rotate_z;
-    buildRotationMatrix_x(rotate_x, x_angle);
-    buildRotationMatrix_y(rotate_y, y_angle);
-    buildRotationMatrix_z(rotate_z, z_angle);
 
-    Mat4 model = multiply(multiply(rotate_z, rotate_y), rotate_x);
+    float angle = frame * (PI / 60.0f); //3 degree rotation per
+    Mat4 rotationxMatrix, rotationyMatrix, rotationzMatrix;
+    buildRotationMatrix_x(rotationxMatrix, angle);
+    buildRotationMatrix_y(rotationyMatrix, angle);
+    buildRotationMatrix_z(rotationzMatrix, angle);
+    Mat4 rotation = multiply(rotationzMatrix, multiply(rotationyMatrix, rotationxMatrix));
+
+    Mat4 model = multiply(rotation, normalise);
     Mat4 mvp = multiply(perspectiveMatrix, multiply(view, model));
 
-    screenVertex screen_verts[8]; //To store the transformed vertices in screen space
-    for(int i = 0; i < 8; ++i) {
-        Vec3 transformedVertex = perspectiveTransform(cube_verts[i], mvp);
-        screen_verts[i].x = (transformedVertex.x * 0.5f + 0.5f) * VIEWPORT_WIDTH;
-        screen_verts[i].y = (0.5f - transformedVertex.y * 0.5f) * VIEWPORT_HEIGHT;
-        screen_verts[i].z = transformedVertex.z;
-        screen_verts[i].color = cube_colors[i];
-}
-
-
-for(int i = 0; i<12; i++)
-      {
-        screenVertex A = screen_verts[cube_indices[i*3]];
-        screenVertex B = screen_verts[cube_indices[i*3+1]];
-        screenVertex C = screen_verts[cube_indices[i*3+2]];
-        drawTriangle(A,B,C);
-      }
-
-char name[64];
-snprintf(name, sizeof(name), "frames/f%03d.ppm", frame);
-writeFramebufferToPPM(name);
+    for (size_t i = 0; i < obj_verts.size(); ++i) {
+        Vec3 transformed = perspectiveTransform(obj_verts[i], mvp);
+        screen_verts[i] = { (transformed.x + 1.0f) * 0.5f * VIEWPORT_WIDTH,
+                            (1.0f - (transformed.y + 1.0f) * 0.5f) * VIEWPORT_HEIGHT,
+                            transformed.z,
+                            obj_colors[i] };
     }
 
-      return 0;
+    for (size_t i = 0; i < obj_indices.size(); i += 3) {
+        const screenVertex& A = screen_verts[obj_indices[i]];
+        const screenVertex& B = screen_verts[obj_indices[i + 1]];
+        const screenVertex& C = screen_verts[obj_indices[i + 2]];
+        drawTriangle(A, B, C);
+    }
+
+    char filename[256];
+    snprintf(filename, sizeof(filename), "frames/%03d.ppm", frame);
+    writeFramebufferToPPM(filename);
+
 }
 
-
+return 0;
+}

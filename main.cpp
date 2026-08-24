@@ -11,8 +11,8 @@ using namespace std;
 #define PI 3.14159265358979f
 
 
-static const int VIEWPORT_WIDTH  = 800;
-static const int VIEWPORT_HEIGHT = 600;
+static const int VIEWPORT_WIDTH  = 3840;
+static const int VIEWPORT_HEIGHT = 2160;
 static const int no_of_pixels =   VIEWPORT_HEIGHT*VIEWPORT_WIDTH; 
 static const float FOV = 60;
 
@@ -162,6 +162,62 @@ void drawTriangle(const screenVertex& A, const screenVertex& B, const screenVert
 
 }
 
+void buildRotationMatrix_y(Mat4& rotationMatrix, float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+
+    rotationMatrix.m[0][0] = c;  rotationMatrix.m[0][1] = 0;  rotationMatrix.m[0][2] = s;  rotationMatrix.m[0][3] = 0;
+    rotationMatrix.m[1][0] = 0;  rotationMatrix.m[1][1] = 1;  rotationMatrix.m[1][2] = 0;  rotationMatrix.m[1][3] = 0;
+    rotationMatrix.m[2][0] = -s; rotationMatrix.m[2][1] = 0;  rotationMatrix.m[2][2] = c;  rotationMatrix.m[2][3] = 0;
+    rotationMatrix.m[3][0] = 0;  rotationMatrix.m[3][1] = 0;  rotationMatrix.m[3][2] = 0;  rotationMatrix.m[3][3] = 1;
+}
+
+void buildRotationMatrix_x(Mat4& rotationMatrix, float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+
+    rotationMatrix.m[0][0] = 1;  rotationMatrix.m[0][1] = 0;  rotationMatrix.m[0][2] = 0;  rotationMatrix.m[0][3] = 0;
+    rotationMatrix.m[1][0] = 0;  rotationMatrix.m[1][1] = c;  rotationMatrix.m[1][2] = -s; rotationMatrix.m[1][3] = 0;
+    rotationMatrix.m[2][0] = 0;  rotationMatrix.m[2][1] = s;  rotationMatrix.m[2][2] = c;  rotationMatrix.m[2][3] = 0;
+    rotationMatrix.m[3][0] = 0;  rotationMatrix.m[3][1] = 0;  rotationMatrix.m[3][2] = 0;  rotationMatrix.m[3][3] = 1;
+}
+
+void buildRotationMatrix_z(Mat4& rotationMatrix, float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+
+    rotationMatrix.m[0][0] = c;  rotationMatrix.m[0][1] = -s; rotationMatrix.m[0][2] = 0;  rotationMatrix.m[0][3] = 0;
+    rotationMatrix.m[1][0] = s;  rotationMatrix.m[1][1] = c;  rotationMatrix.m[1][2] = 0;  rotationMatrix.m[1][3] = 0;
+    rotationMatrix.m[2][0] = 0;  rotationMatrix.m[2][1] = 0;  rotationMatrix.m[2][2] = 1;  rotationMatrix.m[2][3] = 0;
+    rotationMatrix.m[3][0] = 0;  rotationMatrix.m[3][1] = 0;  rotationMatrix.m[3][2] = 0;  rotationMatrix.m[3][3] = 1;
+}
+
+void clearframeBuffer() {
+    for (int y = 0; y < VIEWPORT_HEIGHT; ++y) {
+        for (int x = 0; x < VIEWPORT_WIDTH; ++x) {
+            framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(125), uint8_t(125), uint8_t(125)}; //grey color map generation
+        }
+    }
+}
+
+void clearZBuffer() {
+    for(int i = 0; i<no_of_pixels; i++)
+    {
+        zbuffer[i] = std::numeric_limits<float>::infinity(); //Reset z-buffer to infinity
+    }
+}
+
+void writeFramebufferToPPM(const std::string& filename) {
+    FILE* f = std::fopen(filename.c_str(), "wb");
+    if (f == nullptr) {
+        cout << "Error: Could not open " << filename << " for writing." << endl;
+        return;
+    }
+
+    fprintf(f, "P6\n%d %d\n255\n", VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
+    fwrite(reinterpret_cast<const char*>(framebuffer.data()), sizeof(RGB), no_of_pixels, f);
+    fclose(f);
+}
 int main() {
 
   /*Cube vertices*/
@@ -190,179 +246,48 @@ RGB cube_colors[8] = {
     {255,0,255}, {0,255,255}, {255,128,0}, {128,0,255}
 };
  Mat4 perspectiveMatrix;
-buildPerspectiveMatrix(perspectiveMatrix, FOV * (PI / 180.0f), float(VIEWPORT_WIDTH) / float(VIEWPORT_HEIGHT), 0.1f, 100.0f);
-Mat4 view = { {{1,0,0,0},{0,1,0,0},{0,0,1,-4},{0,0,0,1}} }; //pushes cube 4 unit down into -z
-Mat4 rotate_y = { {{cos(PI/4),0,sin(PI/4),0},{0,1,0,0},{-sin(PI/4),0,cos(PI/4),0},{0,0,0,1}} }; //rotate cube 45 degrees about y-axis
-Mat4 rotate_x = { {{1,0,0,0},{0,cos(PI/4),-sin(PI/4),0},{0,sin(PI/4),cos(PI/4),0},{0,0,0,1}} }; //rotate cube 45 degrees about x-axis
-Mat4 mvp = multiply(perspectiveMatrix, multiply(view, multiply(rotate_y, rotate_x))); //Model-View-Projection matrix
-screenVertex screen_verts[8];
 
-for(int i = 0; i < 8; ++i) {
-    Vec3 transformedVertex = perspectiveTransform(cube_verts[i],mvp);
-    screen_verts[i].x = (transformedVertex.x * 0.5f + 0.5f) * VIEWPORT_WIDTH;
-    screen_verts[i].y = (0.5f - transformedVertex.y * 0.5f) * VIEWPORT_HEIGHT;
-    screen_verts[i].z = transformedVertex.z;
-    screen_verts[i].color = cube_colors[i];
+buildPerspectiveMatrix(perspectiveMatrix, FOV * (PI / 180.0f), float(VIEWPORT_WIDTH) / float(VIEWPORT_HEIGHT), 0.1f, 100.0f);
+
+Mat4 view = { {{1,0,0,0},{0,1,0,0},{0,0,1,-4},{0,0,0,1}} }; //pushes cube 4 unit down into -z
+
+for(int frame = 0; frame <120; ++frame) {
+    clearframeBuffer();
+    clearZBuffer();
+    float x_angle = PI/4;
+    float y_angle = frame * (PI / 60.0f); //Rotate 3 degrees per frame
+    float z_angle = PI/6;
+    Mat4 rotate_x, rotate_y, rotate_z;
+    buildRotationMatrix_x(rotate_x, x_angle);
+    buildRotationMatrix_y(rotate_y, y_angle);
+    buildRotationMatrix_z(rotate_z, z_angle);
+
+    Mat4 model = multiply(multiply(rotate_z, rotate_y), rotate_x);
+    Mat4 mvp = multiply(perspectiveMatrix, multiply(view, model));
+
+    screenVertex screen_verts[8]; //To store the transformed vertices in screen space
+    for(int i = 0; i < 8; ++i) {
+        Vec3 transformedVertex = perspectiveTransform(cube_verts[i], mvp);
+        screen_verts[i].x = (transformedVertex.x * 0.5f + 0.5f) * VIEWPORT_WIDTH;
+        screen_verts[i].y = (0.5f - transformedVertex.y * 0.5f) * VIEWPORT_HEIGHT;
+        screen_verts[i].z = transformedVertex.z;
+        screen_verts[i].color = cube_colors[i];
 }
 
-/*Rest of the lines at the end of int main*/
 
-
-
-  
-   Vec4 vertex1 = {1.0f,0.0f,-5.0f,1.0f};
-   Vec4 vertex2 = {1.0f,0.0f,-10.0f,1.0f};
-  //  Vec3 vertex1_ndc = perspectiveTransform(vertex1, perspectiveMatrix);
-  //  Vec3 vertex2_ndc = perspectiveTransform(vertex2, perspectiveMatrix);
-
-  //  printVector_Vec3(vertex1_ndc);
-  //   printVector_Vec3(vertex2_ndc);
-  
-
-    for (int y = 0; y < VIEWPORT_HEIGHT; ++y) {
-        for (int x = 0; x < VIEWPORT_WIDTH; ++x) {
-            framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(x % 256), uint8_t(y % 256), 0}; //red-green color map generation
-
-            // cout<<"Pixel at (" << x << ", " << y << "): "
-            //     << "R=" << int(framebuffer[y * VIEWPORT_WIDTH + x].r) << ", " //uint_8 is a char type hence typecasting required
-            //     << "G=" << int(framebuffer[y * VIEWPORT_WIDTH + x].g) << ", "
-            //     << "B=" << int(framebuffer[y * VIEWPORT_WIDTH + x].b) << endl;
-        }
-    }
-
-    FILE* f = std::fopen("output.ppm", "wb");
-    if (f == nullptr) {
-        cout << "Error: Could not open output.ppm for writing." <<endl;
-        return 1;
-    }
-
-    
-
-      fprintf(f, "P6\n%d %d\n255\n", VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
-      fwrite(reinterpret_cast<const char*>(framebuffer.data()), sizeof(RGB), no_of_pixels, f);
-      fclose(f);
-  
-      ///Wrote the framebuffer to a PPM file
-
-      for (int y = 0; y < VIEWPORT_HEIGHT; ++y) {
-          for (int x = 0; x < VIEWPORT_WIDTH; ++x) {
-            framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(125), uint8_t(125), uint8_t(125)}; //grey color map generation
-          }
-      }
-
-      float a_x = 150.0f, a_y = 100.0f;
-      float b_x = 620.0f, b_y = 220.0f;
-      float c_x = 300.0f, c_y = 500.0f;
-
-      //Assign a color to each vertex
-      RGB colorA = {uint8_t(255), uint8_t(0), uint8_t(0)}; //red
-      RGB colorB = {uint8_t(0), uint8_t(255), uint8_t(0)}; //green
-      RGB colorC = {uint8_t(0), uint8_t(0), uint8_t(255)}; //blue
-
-      int min_x, min_y, max_x, max_y;
-      
-      bounding_box(a_x, a_y, b_x, b_y, c_x, c_y, min_x, min_y, max_x, max_y);
-      float area = edge_function(a_x, a_y, b_x, b_y, c_x, c_y); //Area of the parallelogram (x2 area of ABC)
-
-      for (int y = min_y; y <= max_y; ++y)
+for(int i = 0; i<12; i++)
       {
-        for (int x = min_x; x <= max_x; ++x)
-        {
-          float w0 = edge_function(b_x, b_y, c_x, c_y, x+0.5f, y+0.5f); //+0.5f to sample at pixel center
-          float w1 = edge_function(c_x, c_y, a_x, a_y, x+0.5f, y+0.5f);
-          float w2 = edge_function(a_x, a_y, b_x, b_y, x+0.5f, y+0.5f);
-
-          bool inside = (w0 >= 0 && w1 >= 0 && w2 >= 0) ||
-              (w0 <= 0 && w1 <= 0 && w2 <= 0);
-
-          if (inside) { // cross product order matters
-              w0 = w0 / area; //wo,w1,w2 are also x2 areas of the subtriangles respectively
-              w1 = w1 / area;
-              w2 = w2 / area;
-
-              //wo,w1,w2 now form the barycentric coordinates of the pixel (x,y) with respect to the triangle ABC   
-
-            //Barycentric interpolation of the color of the pixel (x,y) using the barycentric coordinates and the colors of the vertices              
-              framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(w0 * colorA.r + w1 * colorB.r + w2 * colorC.r),
-                                                      uint8_t(w0 * colorA.g + w1 * colorB.g + w2 * colorC.g),
-                                                      uint8_t(w0 * colorA.b + w1 * colorB.b + w2 * colorC.b)}; //interpolated color for triangle
-          }
-        }
-      }
-
-      FILE* g = std::fopen("triangle.ppm", "wb");
-    if (g == nullptr) {
-        cout << "Error: Could not open triangle.ppm for writing." <<endl;
-        return 1;
-    }
-
-    
-
-      fprintf(g, "P6\n%d %d\n255\n", VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
-      fwrite(reinterpret_cast<const char*>(framebuffer.data()), sizeof(RGB), no_of_pixels, g);
-      fclose(g);
-
-    for (int y = 0; y < VIEWPORT_HEIGHT; ++y) {
-          for (int x = 0; x < VIEWPORT_WIDTH; ++x) {
-            framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(125), uint8_t(125), uint8_t(125)}; //grey color map generation
-          }
-      }
-
-      screenVertex t1a = {150.0f, 100.0f, 0.3f, {255,0,0}};
-      screenVertex t1b = {620.0f, 220.0f, 0.3f, {255,0,0}};
-      screenVertex t1c = {300.0f, 500.0f, 0.3f, {255,0,0}};
-      drawTriangle(t1a, t1b, t1c);
-      
-
-      screenVertex t2a = {150.0f, 100.0f, 0.6f, {0,255,0}};
-      screenVertex t2b = {470.0f, 370.0f, 0.6f, {0,255,0}};
-      screenVertex t2c = {150.0f, 450.0f, 0.6f, {0,255,0}};
-      drawTriangle(t2a, t2b, t2c);
-    
-
-          FILE* h = std::fopen("Overlappingtriangle.ppm", "wb");
-    if (h == nullptr) {
-        cout << "Error: Could not open triangle.ppm for writing." <<endl;
-        return 1;
-    }
-
-    
-
-      fprintf(h, "P6\n%d %d\n255\n", VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
-      fwrite(reinterpret_cast<const char*>(framebuffer.data()), sizeof(RGB), no_of_pixels, h);
-      fclose(h);
-
-
-        for (int y = 0; y < VIEWPORT_HEIGHT; ++y) {
-          for (int x = 0; x < VIEWPORT_WIDTH; ++x) {
-            framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(125), uint8_t(125), uint8_t(125)}; //grey color map generation
-          }
-      }
-
-      for(int i = 0; i<no_of_pixels; i++)
-      {
-        zbuffer[i] = std::numeric_limits<float>::infinity(); //Reset z-buffer to infinity
-      }
-
-/*Reset framebuffer and z-buffer */
-      for(int i = 0; i<12; i++)
-      {
-
         screenVertex A = screen_verts[cube_indices[i*3]];
         screenVertex B = screen_verts[cube_indices[i*3+1]];
         screenVertex C = screen_verts[cube_indices[i*3+2]];
         drawTriangle(A,B,C);
       }
 
-      FILE* k = std::fopen("Cube.ppm", "wb");
-    if (k == nullptr) {
-        cout << "Error: Could not open Cube.ppm for writing." <<endl;
-        return 1;
+char name[64];
+snprintf(name, sizeof(name), "frames/f%03d.ppm", frame);
+writeFramebufferToPPM(name);
     }
 
-      fprintf(k, "P6\n%d %d\n255\n", VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
-      fwrite(reinterpret_cast<const char*>(framebuffer.data()), sizeof(RGB), no_of_pixels, k);
-      fclose(k);
       return 0;
 }
 

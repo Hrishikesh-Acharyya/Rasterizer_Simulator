@@ -1,0 +1,8 @@
+
+# build output
+*.exe
+*.obj
+
+# render output
+*.ppm
+frames/

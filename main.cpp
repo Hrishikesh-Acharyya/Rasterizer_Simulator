@@ -13,8 +13,8 @@ using namespace std;
 #define PI 3.14159265358979f
 
 
-static const int VIEWPORT_WIDTH  = 1920;
-static const int VIEWPORT_HEIGHT = 1080;
+static const int VIEWPORT_WIDTH  = 800;
+static const int VIEWPORT_HEIGHT = 600;
 static const int no_of_pixels =   VIEWPORT_HEIGHT*VIEWPORT_WIDTH; 
 static const float FOV = 60;
 
@@ -359,7 +359,7 @@ int main() {
 
 vector<Vec4> obj_verts;
 vector<int> obj_indices;
-if (!loadOBJ("test.obj", obj_verts, obj_indices)) {
+if (!loadOBJ("icosphere.obj", obj_verts, obj_indices)) {
     return 1; // Exit if the OBJ file could not be loaded
 }
 vector<screenVertex> screen_verts(obj_verts.size()); //To store the transformed vertices in screen space

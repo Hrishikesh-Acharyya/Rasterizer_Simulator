@@ -62,12 +62,6 @@ std::vector<float> zbuffer(no_of_pixels, std::numeric_limits<float>::infinity())
 
 
 
-
-
-
-
-
-
 void drawTriangle(const screenVertex& A, const screenVertex& B, const screenVertex& C) { 
 
   int min_x, min_y, max_x, max_y;

@@ -1,0 +1,66 @@
+name: Docs to Pages
+
+# Publishes the Doxygen HTML to GitHub Pages. Separate from ci.yml on purpose:
+# a deploy needs elevated permissions (pages: write, id-token: write) and a
+# concurrency group, and neither belongs on the build-and-test workflow that
+# runs against every branch and pull request.
+#
+# Requires Settings -> Pages -> Source: "GitHub Actions" to be set once.
+on:
+  push:
+    branches: [main]
+    # Only republish when something the docs are generated FROM has changed.
+    # A README edit or a new GIF does not change the generated HTML, and
+    # redeploying for it just burns minutes.
+    paths:
+      - '**.h'
+      - '**.cpp'
+      - 'Doxyfile'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. cancel-in-progress is false deliberately: cancelling a
+# half-finished deploy can leave the site serving a mixture of two builds.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # graphviz is not optional here as it is locally: the whole point of
+      # publishing is the include, collaboration and call graphs, and without
+      # dot the pages would render with every graph missing.
+      - name: Install doxygen and graphviz
+        run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
+
+      - name: Build docs
+        run: |
+          doxygen Doxyfile
+          test -f docs/html/index.html
+
+      - uses: actions/configure-pages@v6
+
+      # docs/html, not docs: doxygen writes the HTML into a subdirectory, and
+      # uploading the parent would publish a site whose root has no index.html.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -13,8 +13,8 @@ using namespace std;
 #define PI 3.14159265358979f
 
 
-static const int VIEWPORT_WIDTH  = 800;
-static const int VIEWPORT_HEIGHT = 600;
+static const int VIEWPORT_WIDTH  = 1920;
+static const int VIEWPORT_HEIGHT = 1080;
 static const int no_of_pixels =   VIEWPORT_HEIGHT*VIEWPORT_WIDTH; 
 static const float FOV = 60;
 
@@ -351,6 +351,7 @@ Vec3 normalizeVec3(Vec3 v) {
 }
 
 
+
 int main() {
 
 //   /*Cube vertices*/
@@ -389,6 +390,35 @@ if (!loadOBJ("torus.obj", obj_verts, obj_indices)) {
 vector<screenVertex> screen_verts(obj_verts.size()); //To store the transformed vertices in screen space
 vector<Vec4> world_verts(obj_verts.size());
 vector<float> normalization_data = normalizationPass(obj_verts);
+vector<Vec3> vertex_normals(obj_verts.size(), {0.0f, 0.0f, 0.0f}); // Initialize vertex normals to zero
+vector<Vec3> world_normals(obj_verts.size());  
+
+for (size_t i = 0; i < obj_indices.size(); i += 3) {
+    Vec3 A = {obj_verts[obj_indices[i]].x, obj_verts[obj_indices[i]].y, obj_verts[obj_indices[i]].z};
+    Vec3 B = {obj_verts[obj_indices[i + 1]].x, obj_verts[obj_indices[i + 1]].y, obj_verts[obj_indices[i + 1]].z};
+    Vec3 C = {obj_verts[obj_indices[i + 2]].x, obj_verts[obj_indices[i + 2]].y, obj_verts[obj_indices[i + 2]].z};
+    Vec3 edge1 = subVec3(B, A);
+    Vec3 edge2 = subVec3(C, A);
+    Vec3 faceNormal = crossVec3(edge1, edge2);
+
+    vertex_normals[obj_indices[i]].x += faceNormal.x;
+    vertex_normals[obj_indices[i]].y += faceNormal.y;
+    vertex_normals[obj_indices[i]].z += faceNormal.z;
+
+    vertex_normals[obj_indices[i + 1]].x += faceNormal.x;
+    vertex_normals[obj_indices[i + 1]].y += faceNormal.y;
+    vertex_normals[obj_indices[i + 1]].z += faceNormal.z;
+
+    vertex_normals[obj_indices[i + 2]].x += faceNormal.x;
+    vertex_normals[obj_indices[i + 2]].y += faceNormal.y;
+    vertex_normals[obj_indices[i + 2]].z += faceNormal.z;
+}
+
+/*Normalization later to preserve the larger effect of larger triangles. Normalization before 
+would destroy that*/
+for (Vec3& normal : vertex_normals) {
+    normal = normalizeVec3(normal);
+}
 
 float centre_x = (normalization_data[0] + normalization_data[3]) / 2.0f;
 float centre_y = (normalization_data[1] + normalization_data[4]) / 2.0f;
@@ -431,10 +461,12 @@ Mat4 normalise = multiply(scaleM, centreM);
 
 Mat4 view = { {{1,0,0,0},{0,1,0,0},{0,0,1,-4},{0,0,0,1}} };
 Vec3 lightDir = normalizeVec3({1.0f, 1.0f, 1.0f}); //pointing towards camera instead of away to make calculations less messy
+
+
 for(int frame = 0; frame < 120; ++frame) {
     clearframeBuffer();
     clearZBuffer();
-
+    
     float angle = frame * (PI / 60.0f); //3 degree rotation per
     Mat4 rotationxMatrix, rotationyMatrix, rotationzMatrix;
     buildRotationMatrix_x(rotationxMatrix, angle);
@@ -442,11 +474,16 @@ for(int frame = 0; frame < 120; ++frame) {
     buildRotationMatrix_z(rotationzMatrix, angle);
     Mat4 rotation = multiply(rotationzMatrix, multiply(rotationyMatrix, rotationxMatrix));
 
-    Mat4 model = multiply(rotation, normalise);
-    Mat4 mvp = multiply(perspectiveMatrix, multiply(view, model));
+    Mat4 world_space = multiply(rotation, normalise);
+    Mat4 mvp = multiply(perspectiveMatrix, multiply(view, world_space));
 
     for (size_t i = 0; i < obj_verts.size(); ++i) {
-        world_verts[i] = transform(model, obj_verts[i]);
+        world_verts[i] = transform(world_space, obj_verts[i]);
+        
+        Vec4 vertex_normal_augmented = {vertex_normals[i].x,vertex_normals[i].y,vertex_normals[i].z,0};
+        Vec4 vertex_normals_augmented_transformed = transform(world_space, vertex_normal_augmented);
+        world_normals[i] = {vertex_normals_augmented_transformed.x,vertex_normals_augmented_transformed.y, vertex_normals_augmented_transformed.z};
+        world_normals[i] = normalizeVec3({vertex_normals_augmented_transformed.x, vertex_normals_augmented_transformed.y,vertex_normals_augmented_transformed.z});        
         Vec3 transformed = perspectiveTransform(obj_verts[i], mvp);
         screen_verts[i] = { (transformed.x + 1.0f) * 0.5f * VIEWPORT_WIDTH,
                             (1.0f - (transformed.y + 1.0f) * 0.5f) * VIEWPORT_HEIGHT,
@@ -458,23 +495,26 @@ for(int frame = 0; frame < 120; ++frame) {
         screenVertex A = screen_verts[obj_indices[i]];
         screenVertex B = screen_verts[obj_indices[i + 1]];
         screenVertex C = screen_verts[obj_indices[i + 2]];
-        Vec3 Va = {world_verts[obj_indices[i]].x, world_verts[obj_indices[i]].y, world_verts[obj_indices[i]].z};
-        Vec3 Vb = {world_verts[obj_indices[i + 1]].x, world_verts[obj_indices[i + 1]].y, world_verts[obj_indices[i + 1]].z};
-        Vec3 Vc = {world_verts[obj_indices[i + 2]].x, world_verts[obj_indices[i + 2]].y, world_verts[obj_indices[i + 2]].z};
-        Vec3 edge1 = subVec3(Vb, Va);
-        Vec3 edge2 = subVec3(Vc, Va);
-        Vec3 faceNormal = normalizeVec3(crossVec3(edge1, edge2));
-        float intensity = 0.2f + 0.8f * std::max(0.0f, dotVec3(faceNormal, lightDir));
-        A.color = { uint8_t(A.color.r * intensity),
-                    uint8_t(A.color.g * intensity),
-                    uint8_t(A.color.b * intensity) };
+        
+        
+const int ia = obj_indices[i];
+const int ib = obj_indices[i + 1];
+const int ic = obj_indices[i + 2];
+
+float intensityA = 0.4f + 0.6f * std::max(0.0f, dotVec3(world_normals[ia], lightDir));
+float intensityB = 0.4f + 0.6f * std::max(0.0f, dotVec3(world_normals[ib], lightDir));
+float intensityC = 0.4f + 0.6f * std::max(0.0f, dotVec3(world_normals[ic], lightDir));
+
+         A.color = { uint8_t(A.color.r * intensityA),
+                    uint8_t(A.color.g * intensityA),
+                    uint8_t(A.color.b * intensityA) };
                 
-        B.color = { uint8_t(B.color.r * intensity),
-                    uint8_t(B.color.g * intensity),
-                    uint8_t(B.color.b * intensity) };
-        C.color = { uint8_t(C.color.r * intensity),
-                    uint8_t(C.color.g * intensity),
-                    uint8_t(C.color.b * intensity) };
+        B.color = { uint8_t(B.color.r * intensityB),
+                    uint8_t(B.color.g * intensityB),
+                    uint8_t(B.color.b * intensityB) };
+        C.color = { uint8_t(C.color.r * intensityC),
+                    uint8_t(C.color.g * intensityC),
+                    uint8_t(C.color.b * intensityC) };
 
         drawTriangle(A, B, C);
     }

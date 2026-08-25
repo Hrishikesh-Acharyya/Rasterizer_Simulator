@@ -18,7 +18,7 @@ jobs:
         cxx: [g++, clang++]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # -Werror here and not in the Makefile on purpose: a warning should stop
       # CI, but it should not stop someone mid-edit on their own machine.
@@ -62,7 +62,7 @@ jobs:
     name: docs and graphs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install doxygen and graphviz
         run: sudo apt-get update && sudo apt-get install -y doxygen graphviz

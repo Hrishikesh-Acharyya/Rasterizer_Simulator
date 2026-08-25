@@ -8,10 +8,8 @@
 #include <vector>
 #include <fstream>
 #include <sstream>
-using namespace std;
-
-#define PI 3.14159265358979f
-
+#include "vectors.h"
+#include "matrices.h"
 
 static const int VIEWPORT_WIDTH  = 1920;
 static const int VIEWPORT_HEIGHT = 1080;
@@ -53,75 +51,22 @@ uint8_t b;
 };
 static_assert(sizeof(RGB) == 3, "RGB must be tightly packed");
 
-struct Vec3 { float x,y,z; };
-struct Vec4 { float x,y,z,w; };
-struct Mat4 { float m[4][4]; };
 struct screenVertex{
 float x,y,z;
 RGB color;
 };
 
-vector<RGB> framebuffer(no_of_pixels);//Each RGB struct is one pixel
-vector<float> zbuffer(no_of_pixels, std::numeric_limits<float>::infinity()); //Initialize z-buffer to infinity
+std::vector<RGB> framebuffer(no_of_pixels);//Each RGB struct is one pixel
+std::vector<float> zbuffer(no_of_pixels, std::numeric_limits<float>::infinity()); //Initialize z-buffer to infinity
 
-Mat4 multiply(const Mat4& a, const Mat4& b) {
-    Mat4 result;
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            result.m[i][j] = 0.0f;
-            for (int k = 0; k < 4; ++k) {
-                result.m[i][j] += a.m[i][k] * b.m[k][j];
-            }
-        }
-    }
-    return result;
-}
 
-Vec4 transform(const Mat4& mat, const Vec4& vec) {
-    Vec4 result;
-    result.x = mat.m[0][0] * vec.x + mat.m[0][1] * vec.y + mat.m[0][2] * vec.z + mat.m[0][3] * vec.w;
-    result.y = mat.m[1][0] * vec.x + mat.m[1][1] * vec.y + mat.m[1][2] * vec.z + mat.m[1][3] * vec.w;
-    result.z = mat.m[2][0] * vec.x + mat.m[2][1] * vec.y + mat.m[2][2] * vec.z + mat.m[2][3] * vec.w;
-    result.w = mat.m[3][0] * vec.x + mat.m[3][1] * vec.y + mat.m[3][2] * vec.z + mat.m[3][3] * vec.w;
-    return result;
-}
-void printMatrix(const Mat4& mat) {
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            cout << mat.m[i][j] << " ";
-        }
-        cout << endl;
-    }
-}
 
-void printVector_Vec4(const Vec4& vec) {
-    cout << "(" << vec.x << ", " << vec.y << ", " << vec.z << ", " << vec.w << ")" << endl;
-}
 
-void printVector_Vec3(const Vec3& vec) {
-    cout << "(" << vec.x << ", " << vec.y << ", " << vec.z << ")" << endl;
-}
 
-void buildPerspectiveMatrix(Mat4& perspectiveMatrix, float fov, float aspectRatio, float nearPlane, float farPlane) {
-    float t = 1.0f / tan(fov / 2.0f);
 
-    for (int i = 0; i<4; ++i) {
-        for (int j = 0; j<4; ++j) {
-            perspectiveMatrix.m[i][j] = 0.0f;
-        }
-    }
 
-    perspectiveMatrix.m[0][0] = t / aspectRatio;
-    perspectiveMatrix.m[1][1] = t;
-    perspectiveMatrix.m[2][2] = -(farPlane + nearPlane) / (farPlane - nearPlane);
-    perspectiveMatrix.m[2][3] = -(2.0f * farPlane * nearPlane) / (farPlane - nearPlane);
-    perspectiveMatrix.m[3][2] = -1.0f;
-}
-Vec3 perspectiveTransform(const Vec4& vertex, const Mat4& m) {
-    Vec4 clip = transform(m, vertex);
-    float inv_w = (std::fabs(clip.w) > 1e-8f) ? 1.0f / clip.w : 0.0f;
-    return { clip.x * inv_w, clip.y * inv_w, clip.z * inv_w };
-}
+
+
 
 void drawTriangle(const screenVertex& A, const screenVertex& B, const screenVertex& C) { 
 
@@ -164,54 +109,15 @@ void drawTriangle(const screenVertex& A, const screenVertex& B, const screenVert
 
 }
 
-void buildRotationMatrix_y(Mat4& rotationMatrix, float angle) {
-    float c = cos(angle);
-    float s = sin(angle);
 
-    rotationMatrix.m[0][0] = c;  rotationMatrix.m[0][1] = 0;  rotationMatrix.m[0][2] = s;  rotationMatrix.m[0][3] = 0;
-    rotationMatrix.m[1][0] = 0;  rotationMatrix.m[1][1] = 1;  rotationMatrix.m[1][2] = 0;  rotationMatrix.m[1][3] = 0;
-    rotationMatrix.m[2][0] = -s; rotationMatrix.m[2][1] = 0;  rotationMatrix.m[2][2] = c;  rotationMatrix.m[2][3] = 0;
-    rotationMatrix.m[3][0] = 0;  rotationMatrix.m[3][1] = 0;  rotationMatrix.m[3][2] = 0;  rotationMatrix.m[3][3] = 1;
-}
 
-void buildRotationMatrix_x(Mat4& rotationMatrix, float angle) {
-    float c = cos(angle);
-    float s = sin(angle);
 
-    rotationMatrix.m[0][0] = 1;  rotationMatrix.m[0][1] = 0;  rotationMatrix.m[0][2] = 0;  rotationMatrix.m[0][3] = 0;
-    rotationMatrix.m[1][0] = 0;  rotationMatrix.m[1][1] = c;  rotationMatrix.m[1][2] = -s; rotationMatrix.m[1][3] = 0;
-    rotationMatrix.m[2][0] = 0;  rotationMatrix.m[2][1] = s;  rotationMatrix.m[2][2] = c;  rotationMatrix.m[2][3] = 0;
-    rotationMatrix.m[3][0] = 0;  rotationMatrix.m[3][1] = 0;  rotationMatrix.m[3][2] = 0;  rotationMatrix.m[3][3] = 1;
-}
 
-void buildRotationMatrix_z(Mat4& rotationMatrix, float angle) {
-    float c = cos(angle);
-    float s = sin(angle);
 
-    rotationMatrix.m[0][0] = c;  rotationMatrix.m[0][1] = -s; rotationMatrix.m[0][2] = 0;  rotationMatrix.m[0][3] = 0;
-    rotationMatrix.m[1][0] = s;  rotationMatrix.m[1][1] = c;  rotationMatrix.m[1][2] = 0;  rotationMatrix.m[1][3] = 0;
-    rotationMatrix.m[2][0] = 0;  rotationMatrix.m[2][1] = 0;  rotationMatrix.m[2][2] = 1;  rotationMatrix.m[2][3] = 0;
-    rotationMatrix.m[3][0] = 0;  rotationMatrix.m[3][1] = 0;  rotationMatrix.m[3][2] = 0;  rotationMatrix.m[3][3] = 1;
-}
 
-void buildTranslationMatrix(Mat4& m, float tx, float ty, float tz)
-{
-    
-    m.m[0][0] = 1; m.m[0][1] = 0; m.m[0][2] = 0; m.m[0][3] = tx;
-    m.m[1][0] = 0; m.m[1][1] = 1; m.m[1][2] = 0; m.m[1][3] = ty;
-    m.m[2][0] = 0; m.m[2][1] = 0; m.m[2][2] = 1; m.m[2][3] = tz;
-    m.m[3][0] = 0; m.m[3][1] = 0; m.m[3][2] = 0; m.m[3][3] = 1;
 
-}
 
-void buildScalingMatrix(Mat4& m, float sx, float sy, float sz)
-{
-    m.m[0][0] = sx; m.m[0][1] = 0;  m.m[0][2] = 0;  m.m[0][3] = 0;
-    m.m[1][0] = 0;  m.m[1][1] = sy; m.m[1][2] = 0;  m.m[1][3] = 0;
-    m.m[2][0] = 0;  m.m[2][1] = 0;  m.m[2][2] = sz; m.m[2][3] = 0;
-    m.m[3][0] = 0;  m.m[3][1] = 0;  m.m[3][2] = 0;  m.m[3][3] = 1;
-}
-    
+
 
 void clearframeBuffer() {
     for (int y = 0; y < VIEWPORT_HEIGHT; ++y) {
@@ -231,7 +137,7 @@ void clearZBuffer() {
 void writeFramebufferToPPM(const std::string& filename) {
     FILE* f = std::fopen(filename.c_str(), "wb");
     if (f == nullptr) {
-        cout << "Error: Could not open " << filename << " for writing." << endl;
+        std::cout << "Error: Could not open " << filename << " for writing." << std::endl;
         return;
     }
 
@@ -254,7 +160,7 @@ bool loadOBJ(const std::string& path,
 {
     std::ifstream file(path);
     if (!file) {
-        cout << "Error: could not open " << path << endl;
+        std::cout << "Error: could not open " << path << std::endl;
         return false;
     }
 
@@ -291,16 +197,16 @@ bool loadOBJ(const std::string& path,
         // everything else ignored
     }
 
-    cout << "Loaded " << out_verts.size() << " vertices, "
-         << out_indices.size() / 3 << " triangles" << endl;
+    std::cout << "Loaded " << out_verts.size() << " vertices, "
+         << out_indices.size() / 3 << " triangles" << std::endl;
     return true;
 }
 
 
 
-vector<float> normalizationPass(const std::vector<Vec4>& obj_verts)
+std::vector<float> normalizationPass(const std::vector<Vec4>& obj_verts)
 {
-    vector<float> data;
+    std::vector<float> data;
     float min_x = std::numeric_limits<float>::max();
     float min_y = std::numeric_limits<float>::max();
     float min_z = std::numeric_limits<float>::max();
@@ -327,29 +233,6 @@ vector<float> normalizationPass(const std::vector<Vec4>& obj_verts)
 
     return data;
 }
-
-Vec3 subVec3(const Vec3& a, const Vec3& b) {
-    return {a.x - b.x, a.y - b.y, a.z - b.z};
-}
-
-Vec3 crossVec3(const Vec3& a, const Vec3& b) {
-    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
-}
-
-float dotVec3(const Vec3& a, const Vec3& b) {
-    return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-Vec3 normalizeVec3(Vec3 v) {
-    float length = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-    if (length > 1e-8f) {
-        v.x /= length;
-        v.y /= length;
-        v.z /= length;
-    }
-    return v;
-}
-
 
 
 int main() {
@@ -382,24 +265,24 @@ int main() {
 //     {255,0,255}, {0,255,255}, {255,128,0}, {128,0,255}
 // };
 
-vector<Vec4> obj_verts;
-vector<int> obj_indices;
+std::vector<Vec4> obj_verts;
+std::vector<int> obj_indices;
 if (!loadOBJ("torus.obj", obj_verts, obj_indices)) {
     return 1; // Exit if the OBJ file could not be loaded
 }
-vector<screenVertex> screen_verts(obj_verts.size()); //To store the transformed vertices in screen space
-vector<Vec4> world_verts(obj_verts.size());
-vector<float> normalization_data = normalizationPass(obj_verts);
-vector<Vec3> vertex_normals(obj_verts.size(), {0.0f, 0.0f, 0.0f}); // Initialize vertex normals to zero
-vector<Vec3> world_normals(obj_verts.size());  
+std::vector<screenVertex> screen_verts(obj_verts.size()); //To store the transformed vertices in screen space
+std::vector<Vec4> world_verts(obj_verts.size());
+std::vector<float> normalization_data = normalizationPass(obj_verts);
+std::vector<Vec3> vertex_normals(obj_verts.size(), {0.0f, 0.0f, 0.0f}); // Initialize vertex normals to zero
+std::vector<Vec3> world_normals(obj_verts.size());  
 
 for (size_t i = 0; i < obj_indices.size(); i += 3) {
     Vec3 A = {obj_verts[obj_indices[i]].x, obj_verts[obj_indices[i]].y, obj_verts[obj_indices[i]].z};
     Vec3 B = {obj_verts[obj_indices[i + 1]].x, obj_verts[obj_indices[i + 1]].y, obj_verts[obj_indices[i + 1]].z};
     Vec3 C = {obj_verts[obj_indices[i + 2]].x, obj_verts[obj_indices[i + 2]].y, obj_verts[obj_indices[i + 2]].z};
-    Vec3 edge1 = subVec3(B, A);
-    Vec3 edge2 = subVec3(C, A);
-    Vec3 faceNormal = crossVec3(edge1, edge2);
+    Vec3 edge1 = subtract_Vec3(B, A);
+    Vec3 edge2 = subtract_Vec3(C, A);
+    Vec3 faceNormal = cross_Vec3(edge1, edge2);
 
     vertex_normals[obj_indices[i]].x += faceNormal.x;
     vertex_normals[obj_indices[i]].y += faceNormal.y;
@@ -417,7 +300,7 @@ for (size_t i = 0; i < obj_indices.size(); i += 3) {
 /*Normalization later to preserve the larger effect of larger triangles. Normalization before 
 would destroy that*/
 for (Vec3& normal : vertex_normals) {
-    normal = normalizeVec3(normal);
+    normal = normalize_Vec3(normal);
 }
 
 float centre_x = (normalization_data[0] + normalization_data[3]) / 2.0f;
@@ -426,7 +309,7 @@ float centre_z = (normalization_data[2] + normalization_data[5]) / 2.0f;
 float extent = std::max({normalization_data[3] - normalization_data[0], normalization_data[4] - normalization_data[1], normalization_data[5] - normalization_data[2]});
 
 
-vector<RGB> obj_colors(obj_verts.size());
+std::vector<RGB> obj_colors(obj_verts.size());
 {
     float min_x = normalization_data[0], max_x = normalization_data[3];
     float min_y = normalization_data[1], max_y = normalization_data[4];
@@ -457,10 +340,10 @@ Mat4 centreM, scaleM;
 buildTranslationMatrix(centreM, -centre_x, -centre_y, -centre_z);
 float s = 2.0f/extent;
 buildScalingMatrix(scaleM, s, s, s);
-Mat4 normalise = multiply(scaleM, centreM);
+Mat4 normalise = multiply_matrices(scaleM, centreM);
 
 Mat4 view = { {{1,0,0,0},{0,1,0,0},{0,0,1,-4},{0,0,0,1}} };
-Vec3 lightDir = normalizeVec3({1.0f, 1.0f, 1.0f}); //pointing towards camera instead of away to make calculations less messy
+Vec3 lightDir = normalize_Vec3({1.0f, 1.0f, 1.0f}); //pointing towards camera instead of away to make calculations less messy
 
 
 for(int frame = 0; frame < 120; ++frame) {
@@ -472,18 +355,18 @@ for(int frame = 0; frame < 120; ++frame) {
     buildRotationMatrix_x(rotationxMatrix, angle);
     buildRotationMatrix_y(rotationyMatrix, angle);
     buildRotationMatrix_z(rotationzMatrix, angle);
-    Mat4 rotation = multiply(rotationzMatrix, multiply(rotationyMatrix, rotationxMatrix));
+    Mat4 rotation = multiply_matrices(rotationzMatrix, multiply_matrices(rotationyMatrix, rotationxMatrix));
 
-    Mat4 world_space = multiply(rotation, normalise);
-    Mat4 mvp = multiply(perspectiveMatrix, multiply(view, world_space));
+    Mat4 world_space = multiply_matrices(rotation, normalise);
+    Mat4 mvp = multiply_matrices(perspectiveMatrix, multiply_matrices(view, world_space));
 
     for (size_t i = 0; i < obj_verts.size(); ++i) {
-        world_verts[i] = transform(world_space, obj_verts[i]);
+        world_verts[i] = transform_Vec4(world_space, obj_verts[i]);
         
         Vec4 vertex_normal_augmented = {vertex_normals[i].x,vertex_normals[i].y,vertex_normals[i].z,0};
-        Vec4 vertex_normals_augmented_transformed = transform(world_space, vertex_normal_augmented);
+        Vec4 vertex_normals_augmented_transformed = transform_Vec4(world_space, vertex_normal_augmented);
         world_normals[i] = {vertex_normals_augmented_transformed.x,vertex_normals_augmented_transformed.y, vertex_normals_augmented_transformed.z};
-        world_normals[i] = normalizeVec3({vertex_normals_augmented_transformed.x, vertex_normals_augmented_transformed.y,vertex_normals_augmented_transformed.z});        
+        world_normals[i] = normalize_Vec3({vertex_normals_augmented_transformed.x, vertex_normals_augmented_transformed.y,vertex_normals_augmented_transformed.z});        
         Vec3 transformed = perspectiveTransform(obj_verts[i], mvp);
         screen_verts[i] = { (transformed.x + 1.0f) * 0.5f * VIEWPORT_WIDTH,
                             (1.0f - (transformed.y + 1.0f) * 0.5f) * VIEWPORT_HEIGHT,
@@ -501,9 +384,9 @@ const int ia = obj_indices[i];
 const int ib = obj_indices[i + 1];
 const int ic = obj_indices[i + 2];
 
-float intensityA = 0.4f + 0.6f * std::max(0.0f, dotVec3(world_normals[ia], lightDir));
-float intensityB = 0.4f + 0.6f * std::max(0.0f, dotVec3(world_normals[ib], lightDir));
-float intensityC = 0.4f + 0.6f * std::max(0.0f, dotVec3(world_normals[ic], lightDir));
+float intensityA = 0.4f + 0.6f * std::max(0.0f, dot_Vec3(world_normals[ia], lightDir));
+float intensityB = 0.4f + 0.6f * std::max(0.0f, dot_Vec3(world_normals[ib], lightDir));
+float intensityC = 0.4f + 0.6f * std::max(0.0f, dot_Vec3(world_normals[ic], lightDir));
 
          A.color = { uint8_t(A.color.r * intensityA),
                     uint8_t(A.color.g * intensityA),

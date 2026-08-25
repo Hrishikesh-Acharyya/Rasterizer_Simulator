@@ -1,0 +1,56 @@
+/*
+ * Module include graph. An arrow from A to B reads "A includes B".
+ *
+ * Rendered to PNG by `make graphs`; the theme colours are supplied on the dot
+ * command line rather than set here, so one source produces both the light and
+ * the dark variant the README switches between.
+ */
+digraph include_graph {
+    rankdir = BT;
+    fontname = "Helvetica";
+    node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=11,
+          margin="0.18,0.10"];
+    edge [arrowsize=0.7, penwidth=1.1];
+
+    /* Bottom of the graph: these include nothing from the project. */
+    subgraph cluster_base {
+        label = "no project dependencies";
+        labelloc = "t";
+        margin = 14;
+        fontsize = 10;
+        style = "rounded,dashed";
+        vectors [label="vectors.h\nVec3, Vec4, dot, cross"];
+        types   [label="types.h\nRGB, screenVertex"];
+    }
+
+    matrices    [label="matrices.h\nMat4, transforms, divide"];
+    model_h     [label="model.h\nOBJ load, bounds"];
+    framebuf_h  [label="framebuffer.h\ncolour + depth buffers"];
+    raster_h    [label="raster.h\nedge fn, drawTriangle"];
+
+    main        [label="main.cpp\nscene + render loop", shape=box, style="filled"];
+    raster_c    [label="raster.cpp", shape=box, style="filled"];
+    model_c     [label="model.cpp", shape=box, style="filled"];
+    framebuf_c  [label="framebuffer.cpp", shape=box, style="filled"];
+
+    matrices   -> vectors;
+    model_h    -> vectors;
+    framebuf_h -> types;
+    raster_h   -> types;
+
+    main -> vectors;
+    main -> matrices;
+    main -> types;
+    main -> framebuf_h;
+    main -> raster_h;
+    main -> model_h;
+
+    raster_c   -> raster_h;
+    model_c    -> model_h;
+    framebuf_c -> framebuf_h;
+
+    /* The one edge that exists only in the implementation: raster.h does not
+       include framebuffer.h, so a caller of drawTriangle does not inherit the
+       global buffers. raster.cpp does, because it writes to them. */
+    raster_c -> framebuf_h [style=dashed, label="  impl only", fontsize=9];
+}

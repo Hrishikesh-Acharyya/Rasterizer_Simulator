@@ -1,0 +1,19 @@
+# Treat the render outputs and assets as binary. Without this git will try to
+# diff them, and on Windows it may "helpfully" rewrite bytes it mistakes for
+# line endings -- which silently corrupts a PPM, a GIF or an MP4.
+*.ppm  binary
+*.png  binary
+*.gif  binary
+*.mp4  binary
+
+# OBJ models are text, but they are input data rather than source: diffing a
+# thousand vertex lines is never what anyone wants to read in a review.
+*.obj  -diff
+
+# GitHub classifies bare .h as C, which mislabels the repository's language and
+# hides the fact that the headers carry most of the design.
+*.h    linguist-language=C++
+
+# Media is output, not source. Excluding it from the language statistics stops
+# the committed images and videos from drowning out the code.
+Media/ linguist-documentation

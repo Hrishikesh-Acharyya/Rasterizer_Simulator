@@ -11,6 +11,7 @@
 #include "vectors.h"
 #include "matrices.h"
 #include "framebuffer.h"
+#include "types.h"
 
 
  
@@ -45,11 +46,6 @@ void bounding_box(float ax, float ay, float bx, float by, float cx, float cy,
 }
 
 
-
-struct screenVertex{
-float x,y,z;
-RGB color;
-};
 
 
 

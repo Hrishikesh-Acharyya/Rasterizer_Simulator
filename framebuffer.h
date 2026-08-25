@@ -20,39 +20,13 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+#include "types.h"
 constexpr int VIEWPORT_WIDTH  = 1920;
 constexpr int VIEWPORT_HEIGHT = 1080;
 constexpr int no_of_pixels =   VIEWPORT_HEIGHT*VIEWPORT_WIDTH;
 
 
-/**
- * @brief One pixel: 8 bits per channel, no alpha.
- *
- * Field order is the PPM wire order. This struct's BYTE LAYOUT is a contract
- * with the file format, not just a container -- writeFramebufferToPPM fwrites
- * the whole vector as raw bytes without ever naming .r/.g/.b.
- */
-struct RGB{
 
-uint8_t r;
-uint8_t g;
-uint8_t b;
-};
-
-/**
- * The compiler is free to insert padding between or after struct members for
- * alignment. Three uint8_t all have alignment 1, so no padding is possible in
- * practice -- but nothing in the language guarantees it, and if it ever
- * happened (a fourth channel added, a pragma, an unusual ABI) the raw fwrite
- * would shift every pixel after the first and produce diagonal garbage rather
- * than an error. This turns that silent corruption into a compile failure.
- *
- * Note this assert exists for RGB and not for Vec3 or Mat4: those are only ever
- * accessed by member name, so whatever offsets the compiler picks are resolved
- * correctly. Layout only matters when bytes cross a boundary -- file I/O, a
- * bus transaction, or a comparison against RTL output.
- */
-static_assert(sizeof(RGB) == 3, "RGB must be tightly packed");
 
 
 /**

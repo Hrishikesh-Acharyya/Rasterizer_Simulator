@@ -4,7 +4,7 @@
  * @file types.h
  * @brief Plain data types shared across the pipeline stages.
  *
- * Bottom of the dependency graph alongside vectors.h. Depends on <cstdint> and
+ * Bottom of the dependency graph alongside vectors.h. Depends on \<cstdint\> and
  * nothing else, so any stage can include it without inheriting anything.
  *
  * The point of splitting these out: raster.h needs to know what a screenVertex

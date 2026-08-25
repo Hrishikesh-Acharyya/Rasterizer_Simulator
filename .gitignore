@@ -6,3 +6,6 @@
 # render output
 *.ppm
 frames/
+
+# generated documentation
+docs/

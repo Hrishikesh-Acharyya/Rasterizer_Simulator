@@ -21,6 +21,7 @@ float edge_function(float ax, float ay, float bx, float by, float cx, float cy);
 
 /**
  * @brief Screen-space bounding box of triangle ABC.
+ * @param ax,ay,bx,by,cx,cy  Triangle vertices in screen coordinates.
  * @param[out] min_x,min_y,max_x,max_y  Inclusive pixel bounds, clamped to the
  *             viewport. The clamp is required: drawTriangle's writes are
  *             unchecked, so out-of-range bounds corrupt memory.

@@ -1,0 +1,57 @@
+# Minimal Doxygen configuration. Only non-default settings are listed;
+# everything else uses Doxygen's own defaults.
+#
+# Generate with:  make docs      (or: doxygen Doxyfile)
+# Output lands in docs/html/index.html and is gitignored.
+
+PROJECT_NAME           = "Software Rasterizer"
+PROJECT_BRIEF          = "A CPU rasterizer written from scratch, as a reference model for an RTL implementation"
+
+INPUT                  = . 
+FILE_PATTERNS          = *.h *.cpp
+RECURSIVE              = NO
+OUTPUT_DIRECTORY       = docs
+
+# The headers carry the design rationale, so document everything, including
+# file-level comments and statics, not just the public API.
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+JAVADOC_AUTOBRIEF      = YES
+OPTIMIZE_OUTPUT_FOR_C  = NO
+
+# Source browsing matters here: the comments explain the code line by line,
+# so being able to click through to it is most of the value.
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+# Graphs. These need Graphviz (`dot`) on PATH:
+#   Windows  winget install Graphviz.Graphviz   (then reopen the terminal)
+#   Debian   sudo apt install graphviz
+#   macOS    brew install graphviz
+# Set HAVE_DOT = NO to build the HTML without them.
+HAVE_DOT               = YES
+
+# The include DAG is a design decision in this project, not an accident, so
+# draw it both ways: what each file pulls in, and what depends on it.
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+COLLABORATION_GRAPH    = YES
+
+# Call graphs. Worth having on a pipeline: they show the fan-out from the
+# render loop down to the per-pixel inner loop at a glance.
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+
+# SVG rather than PNG: vector, so a graph stays readable when zoomed, and
+# clickable through to the documented entity.
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+HTML_OUTPUT            = html
+
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO

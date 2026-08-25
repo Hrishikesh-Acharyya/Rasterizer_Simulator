@@ -6,161 +6,19 @@
 #include <string>
 #include <iostream>
 #include <vector>
-#include <fstream>
-#include <sstream>
+
 #include "vectors.h"
 #include "matrices.h"
 #include "framebuffer.h"
 #include "types.h"
 #include "raster.h"
-
+#include "model.h"
 
  
 static const float FOV = 60;
 
 
-/*
-Returns the edge function given the triangle 
-*/
-
-
-/*
-Creates the bounding box, given a triangle
-*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-Loads an OBJ file into a vertex list and a flat index list.
-Only 'v' and 'f' lines are used; vt/vn/usemtl/o/g/s/# are skipped.
-OBJ indices are 1-based, so 1 is subtracted on the way in.
-Face tokens may be "5", "5/2", "5//3" or "5/2/3" -- only the part
-before the first '/' is the vertex index.
-Faces with more than 3 vertices are fan-triangulated.
-*/
-bool loadOBJ(const std::string& path,
-             std::vector<Vec4>& out_verts,
-             std::vector<int>&  out_indices)
-{
-    std::ifstream file(path);
-    if (!file) {
-        std::cout << "Error: could not open " << path << std::endl;
-        return false;
-    }
-
-    out_verts.clear();
-    out_indices.clear();
-
-    std::string line;
-    while (std::getline(file, line)) {
-        std::istringstream ss(line);
-        std::string tag;
-        ss >> tag;
-
-        if (tag == "v") {
-            float x, y, z;
-            ss >> x >> y >> z;
-            out_verts.push_back({x, y, z, 1.0f});
-        }
-        else if (tag == "f") {
-            std::vector<int> face;          // indices for this one face
-            std::string token;
-            while (ss >> token) {
-                size_t slash = token.find('/');
-                if (slash != std::string::npos)
-                    token = token.substr(0, slash);   // keep only "5" from "5/2/3"
-                face.push_back(std::stoi(token) - 1); // OBJ is 1-based
-            }
-            // fan-triangulate: (0,1,2), (0,2,3), (0,3,4) ...
-            for (size_t i = 1; i + 1 < face.size(); ++i) {
-                out_indices.push_back(face[0]);
-                out_indices.push_back(face[i]);
-                out_indices.push_back(face[i + 1]);
-            }
-        }
-        // everything else ignored
-    }
-
-    std::cout << "Loaded " << out_verts.size() << " vertices, "
-         << out_indices.size() / 3 << " triangles" << std::endl;
-    return true;
-}
-
-
-
-std::vector<float> normalizationPass(const std::vector<Vec4>& obj_verts)
-{
-    std::vector<float> data;
-    float min_x = std::numeric_limits<float>::max();
-    float min_y = std::numeric_limits<float>::max();
-    float min_z = std::numeric_limits<float>::max();
-    float max_x = std::numeric_limits<float>::lowest();
-    float max_y = std::numeric_limits<float>::lowest();
-    float max_z = std::numeric_limits<float>::lowest();
-
-    for (size_t i = 0; i<obj_verts.size(); ++i) {
-        min_x = std::min(min_x, static_cast<float>(obj_verts[i].x));
-        min_y = std::min(min_y, static_cast<float>(obj_verts[i].y));
-        min_z = std::min(min_z, static_cast<float>(obj_verts[i].z));
-
-        max_x = std::max(max_x, static_cast<float>(obj_verts[i].x));
-        max_y = std::max(max_y, static_cast<float>(obj_verts[i].y));
-        max_z = std::max(max_z, static_cast<float>(obj_verts[i].z));
-    }
-
-    data.push_back(min_x);
-    data.push_back(min_y);
-    data.push_back(min_z);
-    data.push_back(max_x);
-    data.push_back(max_y);
-    data.push_back(max_z);
-
-    return data;
-}
-
-
 int main() {
-
-//   /*Cube vertices*/
-//   vector<Vec4> cube_verts = {
-//     {-1,-1,-1,1}, { 1,-1,-1,1}, { 1, 1,-1,1}, {-1, 1,-1,1},  // 0-3: back  z=-1
-//     {-1,-1, 1,1}, { 1,-1, 1,1}, { 1, 1, 1,1}, {-1, 1, 1,1}   // 4-7: front z=+1
-// };
-
-//  vector<screenVertex> screen_verts(cube_verts.size()); //To store the transformed vertices in screen space
-
-// /*indices of the vertex that make up the faces of the cube as triangles. The indices represent the vertex number in cube_verts
-//   Direction of vertices chosen such that it follows outward normal nomenclature for a closed solid 
-// */
-// vector<int> cube_indices = 
-// {
-
-//     2,1,0, 0,3,2, //z = -1 face
-//     4,5,6, 6,7,4, //z = +1 face
-//     7,6,2, 2,3,7, //y = +1 face
-//     1,5,4, 4,0,1, //y = -1 face
-//     1,2,6, 6,5,1, //x = +1 face
-//     7,3,0, 0,4,7  //x = -1 face
-
-// };
-
-// vector<RGB> cube_colors = {
-//     {255,0,0}, {0,255,0}, {0,0,255}, {255,255,0},
-//     {255,0,255}, {0,255,255}, {255,128,0}, {128,0,255}
-// };
 
 std::vector<Vec4> obj_verts;
 std::vector<int> obj_indices;

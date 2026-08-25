@@ -176,6 +176,7 @@ inline void buildScalingMatrix(Mat4& m, float sx, float sy, float sz)
   
 /**
  * @brief Perspective projection matrix.
+ * @param[out] perspectiveMatrix  Fully overwritten; all 16 elements are set.
  * @param fov         Vertical field of view, RADIANS (call sites pass degrees
  *                    * PI/180 ).
  * @param aspectRatio width/height.
@@ -272,7 +273,7 @@ inline Vec3 perspectiveTransform(const Vec4& vertex, const Mat4& m) {
 /**
  * @brief Debug dump: one matrix row per line, fixed width so columns align.
  *
- * printf rather than std::cout to keep <iostream> out of a widely-included
+ * printf rather than std::cout to keep \<iostream\> out of a widely-included
  * header (it is large and injects a static initialiser into every TU).
  */
 

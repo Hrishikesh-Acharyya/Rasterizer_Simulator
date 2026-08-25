@@ -198,7 +198,7 @@ inline void buildScalingMatrix(Mat4& m, float sx, float sy, float sz)
  * AFTER the w divide. Because the mapping is in 1/z rather than z, depth
  * precision is heavily front-loaded -- most of the available bits go to
  * geometry near the camera. That is z-fighting's root cause and the reason
- * pushing `near` outward is the standard fix. Directly relevant to chunk 4:
+ * pushing `near` outward is the standard fix. Directly relevant to RTL rasterizer:
  * a fixed-point z-buffer must budget its bits around this non-uniformity.
  *
  * ONLY 6 OF 16 ELEMENTS ARE MEANINGFUL, so this builder MUST

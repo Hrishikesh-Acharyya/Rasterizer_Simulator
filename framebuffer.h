@@ -14,7 +14,7 @@
  * a Framebuffer struct passed explicitly would make ownership and lifetime
  * visible. In hardware terms a framebuffer is a memory region with a base
  * address and a size, not an ambient fact -- which is exactly what the SDRAM
- * controller in chunk 3 has to make explicit.
+ * controller has to make explicit.
  */
 
 #include <vector>

@@ -1,0 +1,10 @@
+# Keeps the pinned action versions in .github/workflows current. The C++ side
+# has no dependencies to update -- this covers only the CI actions themselves.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"

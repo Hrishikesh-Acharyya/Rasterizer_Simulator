@@ -5,7 +5,7 @@
  effect ACROSS translation units.*/
 
  /**
- * @file vec.h
+ * @file vectors.h
  * @brief Vector types and pure vector arithmetic. Base of the dependency graph.
  *
  * This header depends on NOTHING else in the project. Everything else may
@@ -32,7 +32,7 @@
 /**
  * @brief Pi as a typed compile-time constant.
  *
- * constexpr, not #define. A macro is blind text substitution performed before
+ * constexpr, not \#define. A macro is blind text substitution performed before
  * the compiler runs: no type, no scope, invisible to the debugger, and it
  * rewrites every token named PI in every file that transitively includes this
  * one -- including struct members and other people's headers.
@@ -144,7 +144,7 @@ inline Vec3 normalize_Vec3(Vec3 v) {
 
 
 /** @brief Debug print: (x, y, z). Uses printf rather than std::cout because
- *  <iostream> is a very large header and injects a static initialiser into
+ *  \<iostream\> is a very large header and injects a static initialiser into
  *  every translation unit that includes it -- and this header is included by
  *  everything. */
 inline void print_vector_Vec3(const Vec3& v) {

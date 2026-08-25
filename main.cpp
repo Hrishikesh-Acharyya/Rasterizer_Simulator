@@ -37,7 +37,7 @@ int main() {
 
     std::vector<Vec4> obj_verts;
     std::vector<int>  obj_indices;
-    if (!loadOBJ("Media/Obj_files/icosphere.obj", obj_verts, obj_indices)) {
+    if (!loadOBJ("Media/Obj_files/torus.obj", obj_verts, obj_indices)) {
         return 1;
     }
 

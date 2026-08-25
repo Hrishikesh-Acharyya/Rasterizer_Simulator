@@ -49,7 +49,8 @@ Media/            Obj_files, Videos, Gifs, png_files
 ```
 
 The include graph is kept a DAG on purpose — each `.cpp` can be compiled and
-tested in isolation, which is what a testbench needs:
+tested in isolation, which is what a testbench needs. `make docs` draws this
+per file and in both directions; the summary is:
 
 ```mermaid
 graph TD
@@ -159,7 +160,18 @@ make clean      # remove objects and the executable
 ```
 
 `make video` and `make gif` need `ffmpeg` on `PATH`. `make docs` needs
-`doxygen`; neither is required to build or render.
+`doxygen`, plus `graphviz` for the graphs (`winget install Graphviz.Graphviz`,
+`apt install graphviz`, `brew install graphviz`) — set `HAVE_DOT = NO` in the
+`Doxyfile` to build the HTML without them. None of it is required to build or
+render.
+
+The generated docs are worth the two-minute install: alongside the prose from
+the headers, Doxygen draws the **include graph** for every file (both
+directions — what it pulls in, and what depends on it), a **collaboration
+graph** per struct, and a **call/caller graph** per function. The last one is
+the useful one here: it shows the fan-out from the render loop down to the
+per-pixel inner loop, which is the same fan-out the hardware has to pipeline.
+Output lands in `docs/html/index.html`; `docs/` is gitignored.
 
 Without make:
 

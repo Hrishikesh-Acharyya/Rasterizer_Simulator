@@ -1,0 +1,38 @@
+# Minimal Doxygen configuration. Only non-default settings are listed;
+# everything else uses Doxygen's own defaults.
+#
+# Generate with:  make docs      (or: doxygen Doxyfile)
+# Output lands in docs/html/index.html and is gitignored.
+
+PROJECT_NAME           = "Software Rasterizer"
+PROJECT_BRIEF          = "A CPU rasterizer written from scratch, as a reference model for an RTL implementation"
+
+INPUT                  = . 
+FILE_PATTERNS          = *.h *.cpp
+RECURSIVE              = NO
+OUTPUT_DIRECTORY       = docs
+
+# The headers carry the design rationale, so document everything, including
+# file-level comments and statics, not just the public API.
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+JAVADOC_AUTOBRIEF      = YES
+OPTIMIZE_OUTPUT_FOR_C  = NO
+
+# Source browsing matters here: the comments explain the code line by line,
+# so being able to click through to it is most of the value.
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+# Include-dependency graphs need Graphviz. Off so `make docs` works on a bare
+# install; set to YES with graphviz on PATH to get the header DAG drawn out.
+HAVE_DOT               = NO
+
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+HTML_OUTPUT            = html
+
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO

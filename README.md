@@ -3,29 +3,73 @@
 A 3D triangle rasterizer written from scratch in C++ — no OpenGL, no Vulkan, no
 graphics library of any kind. The only drawing primitive in the whole program is
 "write three bytes into an array". Everything above that — perspective
-projection, the depth test, barycentric interpolation, Lambertian shading — is
-built by hand in [`main.cpp`](main.cpp).
+projection, the depth test, barycentric coverage, Gouraud-shaded lighting — is
+built by hand.
 
-The goal is not performance. The goal is to build, stage by stage, the pipeline
-that a GPU implements in silicon, so that the hardware makes sense later:
-what a vertex shader actually is, why the z-buffer exists, why triangles are
-the universal primitive, and where all the parallelism hides.
+It is not trying to be fast. It is a **reference model**: an executable,
+readable definition of what a rasterizer does, stage by stage, so that the
+hardware version has something to be diffed against. The design notes in the
+headers are written with that in mind — why `RGB` must be exactly three bytes,
+why the perspective divide is the one expensive operation in an otherwise pure
+multiply-add pipeline, why depth traffic and not arithmetic is what makes a GPU
+a memory-bandwidth problem.
 
 ## Gallery
 
 | | |
 |---|---|
-| <img src="spinning_cube.gif" width="380"><br>**Spinning cube** — 8 vertices, 12 triangles, vertex colours interpolated across each face. | <img src="torus.gif" width="380"><br>**Torus, unlit** — loaded from OBJ, coloured by position within its bounding box. |
-| <img src="torus_lambertian_lighting.gif" width="380"><br>**Torus, flat shaded** — one face normal per triangle, `0.2 + 0.8·max(0, N·L)`. | <img src="icosphere_lambertian_lighting.gif" width="380"><br>**Icosphere, flat shaded** — the facets are real: shading is per triangle, not per pixel. |
+| <img src="Media/Gifs/spinning_cube.gif" width="380"><br>**Spinning cube** — 8 vertices, 12 triangles, vertex colours interpolated across each face. | <img src="Media/Gifs/torus.gif" width="380"><br>**Torus, unlit** — loaded from OBJ, coloured by position within its bounding box. |
+| <img src="Media/Gifs/icosphere_lambertian_lighting.gif" width="380"><br>**Icosphere, flat shaded** — one normal per triangle. The facets are the geometry being honest. | <img src="Media/Gifs/icosphere_gouraud_shading.gif" width="380"><br>**Icosphere, Gouraud shaded** — same 320 triangles, normals averaged per vertex and interpolated across the face. |
+| <img src="Media/Gifs/torus_lambertian_lighting.gif" width="380"><br>**Torus, flat shaded** — visible banding along every triangle edge. | <img src="Media/Gifs/torus_gouraud_shading.gif" width="380"><br>**Torus, Gouraud shaded** — the banding is gone without adding a single triangle. |
 
-The full-resolution versions are in the repo as `.mp4`.
+The two right-hand renders are the whole argument for per-vertex normals: the
+mesh is identical, only where the lighting is evaluated changed. Full-resolution
+versions are in [`Media/Videos/`](Media/Videos).
 
-### The stills, in the order they were made
+### Earlier stills, in the order they were made
 
 | | | | |
 |---|---|---|---|
-| <img src="output.png" width="180"> | <img src="triangle.png" width="180"> | <img src="Overlappingtriangle.png" width="180"> | <img src="Cube.png" width="180"> |
-| Framebuffer plumbing: a gradient written straight to a PPM file. | One triangle, filled by the edge function, coloured by barycentric weights. | Two triangles at different depths — the z-buffer decides who wins per pixel. | A cube under perspective projection. |
+| <img src="Media/png_files/output.png" width="180"> | <img src="Media/png_files/triangle.png" width="180"> | <img src="Media/png_files/Overlappingtriangle.png" width="180"> | <img src="Media/png_files/Cube.png" width="180"> |
+| Framebuffer plumbing: a gradient written straight to a PPM file. | One triangle, filled by the edge function, coloured by barycentric weights. | Two triangles at different depths — the z-buffer decides per pixel. | A cube under perspective projection. |
+
+## Repository layout
+
+```
+main.cpp          scene setup and the per-frame render loop
+vectors.h         Vec3/Vec4 and pure vector arithmetic          (no dependencies)
+matrices.h        Mat4, transform builders, perspective divide
+types.h           RGB and screenVertex                          (no dependencies)
+framebuffer.h/cpp colour + depth buffers, clears, PPM output
+raster.h/cpp      edge function, bounding box, drawTriangle
+model.h/cpp       OBJ loader and bounding-box measurement
+Makefile          build, render, encode video/GIF, build docs
+Doxyfile          optional HTML docs from the header comments
+Media/            Obj_files, Videos, Gifs, png_files
+```
+
+The include graph is kept a DAG on purpose — each `.cpp` can be compiled and
+tested in isolation, which is what a testbench needs:
+
+```mermaid
+graph TD
+    vectors[vectors.h] --> matrices[matrices.h]
+    vectors --> model[model.h]
+    types[types.h] --> framebuffer[framebuffer.h]
+    types --> raster[raster.h]
+    matrices --> main[main.cpp]
+    model --> main
+    framebuffer --> main
+    raster --> main
+    framebuffer -.-> rastercpp[raster.cpp]
+```
+
+`vectors.h` and `types.h` sit at the bottom and include nothing from the
+project. `raster.h` deliberately does not include `framebuffer.h` — a caller
+needs to know what a `screenVertex` is, not that a global framebuffer exists.
+`raster.cpp` does include it, because the implementation writes to those
+globals. Interface and binding are different edges, and separating them is what
+would let the rasterizer be pointed at a caller-supplied buffer later.
 
 ## The pipeline
 
@@ -36,28 +80,37 @@ OBJ file
    |  loadOBJ()               parse v/f lines, fan-triangulate polygons
    v
 model space
-   |  normalizationPass()     bounding box -> centre + scale to fit a 2-unit box
-   |  rotation X * Y * Z      buildRotationMatrix_{x,y,z}()
+   |  vertex normal pass      accumulate unnormalised face normals per vertex,
+   |                          normalise once at the end (area-weighted average)
+   |  normalise matrix        centre on origin, scale largest axis to 2 units
+   |  rotation X * Y * Z      3 degrees per frame, 120 frames = one full turn
    v
-world space                   <- face normals + Lambert term computed here
-   |  view matrix             fixed translate, camera at z = +4 looking down -z
-   |  perspective matrix      buildPerspectiveMatrix(), 60 deg FOV, near 0.1, far 100
+world space                   <- N.L evaluated here, per vertex
+   |  view matrix             translate -4 on Z; camera at +4 looking down -Z
+   |  perspective matrix      60 deg vertical FOV, near 0.1, far 100
    v
 clip space
-   |  perspectiveTransform()  divide x, y, z by w
+   |  perspectiveTransform()  one reciprocal, three multiplies: x,y,z / w
    v
 NDC  [-1, 1]
-   |  viewport map            -> 800 x 600 pixels, y flipped
+   |  viewport map            -> 1920 x 1080 pixels, Y flipped
    v
 screen space
-   |  drawTriangle()          bounding box -> edge functions -> depth test -> interpolate
+   |  drawTriangle()          bounding box -> edge functions -> depth test
+   |                          -> barycentric colour interpolation
    v
 framebuffer -> writeFramebufferToPPM()
 ```
 
-**Rasterization** ([`drawTriangle`](main.cpp)) is the heart of it. For each
-triangle it takes the screen-space bounding box, and for every pixel centre
-inside that box evaluates three edge functions:
+The vertex loop runs 800 times per frame, the triangle loop 1600 times, and the
+rasterizer's inner loop once per covered pixel — millions. That widening ratio
+is the shape of the whole problem, and it is why the fixed-function hardware
+sits at the wide end.
+
+### Coverage
+
+For each triangle, `drawTriangle` walks the screen-space bounding box and
+evaluates three edge functions at every pixel centre:
 
 ```cpp
 float edge_function(float ax, float ay, float bx, float by, float cx, float cy) {
@@ -65,91 +118,148 @@ float edge_function(float ax, float ay, float bx, float by, float cx, float cy) 
 }
 ```
 
-Each is twice the signed area of a sub-triangle. All three the same sign means
-the pixel is inside. Divide each by the full triangle area and they become the
-barycentric weights, which are then used for two things: interpolating depth for
-the z-test, and interpolating vertex colour for the fill. Same three numbers,
-two jobs — which is exactly the trick real hardware uses.
+Each result is twice the signed area of a sub-triangle. All three the same sign
+means the pixel is inside. Divide each by the full triangle area and the same
+three numbers become the barycentric weights, used for two things: interpolating
+depth for the z-test, and interpolating vertex colour for the fill. One
+computation, three jobs — which is exactly why real hardware is built around it.
 
-**Shading** is flat: the face normal comes from the cross product of two
-world-space edges, the light direction is fixed at normalized `(1, 1, 1)`, and
-the resulting intensity scales all three vertex colours before the triangle is
-filled. Hence the visible facets on the icosphere — that is the geometry being
-honest, not a bug.
+### Shading
+
+Lighting is evaluated **per vertex** (Gouraud), not per face:
+
+1. Before the render loop, each triangle's face normal is added to all three of
+   its vertices. The normals are accumulated **unnormalised**, so each face
+   contributes in proportion to its area — the cross product's magnitude carries
+   that for free. Normalising inside the loop would weight a sliver the same as
+   a large quad.
+2. Each vertex normal is normalised once, after all contributions are summed.
+3. Per frame, normals are transformed by the world matrix with `w = 0`, because
+   translating a direction is meaningless.
+4. `intensity = 0.4 + 0.6 · max(0, N·L)`, evaluated three times per triangle.
+   The rasterizer interpolates the resulting colours across the face.
+
+Phong shading would move step 4 into the inner loop — one `N·L` per *fragment*
+instead of per vertex, far more accurate on large triangles and far more
+expensive. That trade is the next thing worth measuring.
 
 ## Build and run
 
-Only the standard library is needed.
+Needs a C++17 compiler and nothing else. The Makefile works on Windows
+(cmd.exe + MinGW `mingw32-make`) and on Linux/macOS; it selects the right shell
+and file-removal commands from `$(OS)`.
 
 ```bash
-g++ -std=c++17 -O2 -Wall -o raster main.cpp
-mkdir frames            # writeFramebufferToPPM will not create it
-./raster                # raster.exe on Windows
+make            # build -> renderer (renderer.exe on Windows)
+make run        # build, clear stale frames, render 120 frames into frames/
+make video      # run, then encode Media/Videos/torus_gouraud_shading.mp4
+make gif        # run, then encode Media/Gifs/torus_gouraud_shading.gif
+make docs       # doxygen HTML into docs/html/index.html  (optional)
+make clean      # remove objects and the executable
 ```
 
-The render target is set at the top of `main()` — currently `loadOBJ("torus.obj", ...)`.
-Put a `.obj` file with that name next to the executable, or point it at another
-one. The commented-out block above it is the hand-written cube, kept as the
-minimal case that needs no asset file.
+`make video` and `make gif` need `ffmpeg` on `PATH`. `make docs` needs
+`doxygen`; neither is required to build or render.
 
-Output is 120 frames of `800x600` binary PPM (P6) in `frames/`. To turn them
-into a video and a GIF:
+Without make:
 
 ```bash
-# frames -> mp4
-ffmpeg -framerate 30 -i frames/%03d.ppm -c:v libx264 -pix_fmt yuv420p out.mp4
-
-# mp4 -> gif, via a palette so the gradients survive quantization
-ffmpeg -i out.mp4 -vf "fps=20,scale=480:-1:flags=lanczos,palettegen=max_colors=128:stats_mode=diff" palette.png
-ffmpeg -i out.mp4 -i palette.png -lavfi "fps=20,scale=480:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3" out.gif
+g++ -std=c++17 -Wall -Wextra -O2 main.cpp framebuffer.cpp raster.cpp model.cpp -o renderer
+mkdir frames
+./renderer
 ```
 
-A single 800x600 PPM is 1.4 MB and 120 of them is 2.8 GB, so `frames/` and
-`*.ppm` are gitignored — only the encoded video and GIF are committed.
+**Paths are resolved from the working directory**, not from the executable, so
+run from the repository root — `main.cpp` loads `Media/Obj_files/torus.obj`.
+Change that one line to swap models; `icosphere.obj` and `test.obj` (a cube) are
+there too.
+
+**`frames/` gets large.** At 1920×1080 a single P6 PPM is 6.2 MB and a 120-frame
+run writes **713 MB**. It is gitignored along with `*.ppm`, and `make run` clears
+it first — a leftover frame that the new run does not overwrite would silently
+appear in the video and look like a rendering bug.
+
+### Measured cost
+
+A full 120-frame run of the torus (1600 triangles, 1920×1080, `-O2`, single
+thread, Linux container):
+
+| | |
+|---|---|
+| wall clock | ~5.1 s |
+| user (transform + raster) | ~0.9 s → **~7 ms/frame** |
+| system (writing 713 MB of PPM) | ~4.2 s |
+
+Roughly 80% of the run is file I/O. Worth knowing before optimising the inner
+loop: at this resolution the renderer is bound by getting bytes out, not by
+computing them. The same shape shows up one level down — every fragment costs a
+depth read, and only survivors cost a depth write plus a colour write, with no
+reuse between them. Streaming, not caching. That traffic is why real hardware
+spends transistors on hierarchical-Z and depth compression rather than on more
+ALUs.
+
+## Known gaps
+
+Deliberately unbuilt, roughly in the order they start to matter:
+
+- **No clipping.** Nothing is clipped against the near plane. A vertex at or
+  behind the eye gives `w ≈ 0`, and `perspectiveTransform` returns the origin
+  as a placeholder rather than splitting the triangle. Unhit only because the
+  camera sits outside the model; it breaks the moment the camera moves inside
+  one.
+- **Interpolation is affine, not perspective correct.** Barycentric weights are
+  computed in screen space and applied directly to colour and depth. Correct
+  values need per-vertex division by `w` and renormalisation. Invisible on small
+  centred models, obvious on a large tilted one.
+- **No backface culling.** The inside test accepts either winding, so back faces
+  are rasterized and then discarded by the depth test — roughly twice the
+  fragment work needed. The sign of the triangle area is already computed and is
+  exactly the test that would cull them.
+- **Vertex colour is a placeholder.** Position within the bounding box mapped to
+  RGB, so geometry is legible without materials. MTL `Kd` parsing is the real
+  answer.
+- **Non-uniform scale would break normals.** They are transformed by the world
+  matrix, which is only correct for uniform scale; the general case needs the
+  inverse transpose. Currently harmless, since the only scale applied is uniform.
+- **Out-parameters and magic indices.** The matrix builders take `Mat4&` and
+  return void, so a forgotten call leaves stack garbage with no warning;
+  `normalizationPass` returns six floats addressed by number, where a wrong
+  index yields a wrong render rather than an error. Both are deferred on
+  purpose — the file split was verified as a no-op first — and both are worth
+  fixing before the interfaces get frozen against a testbench.
+- **Single threaded.** Every triangle, every pixel, in order. Which is the whole
+  point of what comes next.
 
 ## How it got here
 
 | Commit | Milestone |
 |---|---|
-| `5f00633` | Framebuffer as a flat `vector<RGB>`, `static_assert` that `RGB` is 3 bytes so it can be `fwrite`n straight out. |
+| `5f00633` | Framebuffer as a flat `vector<RGB>`, with a `static_assert` that `RGB` is 3 bytes so it can be `fwrite`n straight out. |
 | `621e4f8` | Colour map written to a PPM file — proof the bytes land where they should. |
-| `83bbe08` | The edge function, the inside test, and a bounding box that is clamped to the screen (an unclamped one indexes past the end of the vector and corrupts memory). |
+| `83bbe08` | Edge function, inside test, and a bounding box clamped to the viewport (an unclamped one indexes past the end of the vector). |
 | `ec5aad4` | Edge function values reused as barycentric weights → smooth colour across a triangle. |
-| `52bd7c1` | Z-buffer and depth test, so overlapping triangles resolve per pixel instead of by draw order. |
+| `52bd7c1` | Z-buffer and depth test: overlapping triangles resolve per pixel instead of by draw order. |
 | `f8b16a8` | Perspective matrix and the divide by `w`. Flat images become 3D. |
 | `2629503` | Rotation matrices about X, Y, Z, composed into a model matrix. |
 | `9c34965` | 120-frame animation loop with per-frame buffer clears. |
-| `1429249` | OBJ loader — `v`/`f` lines, `5/2/3` face tokens, fan triangulation, plus a normalization pass so any model fits the view regardless of its authored scale. |
+| `1429249` | OBJ loader — `v`/`f` lines, `5/2/3` face tokens, fan triangulation, plus a normalisation pass so any model fits the view. |
 | `38239af` | Icosphere and torus rendered through the loader. |
-| `6c25434` | Face normals and a Lambertian diffuse term with ambient floor. |
-| `6d9e865` | Torus under the same lighting. |
-
-## Known gaps
-
-Deliberately unbuilt so far, roughly in the order they start to matter:
-
-- **No clipping.** Nothing is clipped against the near plane. A vertex at or
-  behind the camera produces a `w` near zero, and `perspectiveTransform` just
-  zeroes it out rather than splitting the triangle. Works only because the
-  camera never gets close.
-- **Interpolation is affine, not perspective correct.** Barycentric weights are
-  computed in screen space and applied directly to colour and depth. Correct
-  values need the weights divided by `w` per vertex and renormalized. Invisible
-  on small, distant models; obvious on a large tilted one.
-- **No backface culling.** The inside test accepts either winding, so back faces
-  are rasterized and then thrown away by the depth test — roughly twice the
-  fragment work needed.
-- **Flat shading only.** Per-vertex normals and interpolation across the face
-  (Gouraud, then Phong) are the next step; the OBJ loader already skips `vn`
-  lines that would provide them.
-- **Single threaded.** Every triangle, every pixel, in order. Which is the whole
-  point of what comes next.
+| `6c25434` | Face normals and a Lambertian diffuse term with an ambient floor. |
+| `282c3e3` | Gouraud shading: area-weighted per-vertex normals, lighting evaluated per vertex. |
+| `95ac44b`–`ef5f2ef` | Split from one 488-line `main.cpp` into vectors / matrices / types / framebuffer / raster / model, each documented with its rationale. |
+| `b01b116` | Makefile: incremental build, render, video and GIF targets. |
 
 ## Where this is going
 
 The rasterizer is the software half of a hardware question. Having written the
 pipeline by hand, the interesting part is what a GPU does differently: why
 fragment work is embarrassingly parallel, how SIMD lanes map onto pixel quads,
-what a warp is, why memory bandwidth and not arithmetic is the wall, and how the
-z-buffer and framebuffer become concrete memory hierarchy problems.
+why a fixed-point depth buffer has to budget its bits around the non-uniform
+precision of `1/z`, and where the bandwidth actually goes.
 
+The intended destination is an RTL implementation with this program as its
+golden reference — same geometry in, framebuffer diffed pixel for pixel. That
+target is why several decisions here look over-careful: the byte-layout assert
+on `RGB`, the POD structs with predictable flat layout, the flagged spots where
+a float pipeline will have to become a fixed-point one, and the header split
+that keeps each stage instantiable on its own.

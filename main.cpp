@@ -12,6 +12,7 @@
 #include "matrices.h"
 #include "framebuffer.h"
 #include "types.h"
+#include "raster.h"
 
 
  
@@ -21,29 +22,12 @@ static const float FOV = 60;
 /*
 Returns the edge function given the triangle 
 */
-float edge_function(float ax, float ay, float bx, float by, float cx, float cy) {
-     return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
-}
+
 
 /*
 Creates the bounding box, given a triangle
 */
 
-void bounding_box(float ax, float ay, float bx, float by, float cx, float cy,
-                  int& min_x, int& min_y, int& max_x, int& max_y) {
-    // min/max on the FLOATS first, then floor/ceil, then cast.
-    min_x = static_cast<int>(std::floor(std::min({ax, bx, cx})));
-    max_x = static_cast<int>(std::ceil (std::max({ax, bx, cx})));
-    min_y = static_cast<int>(std::floor(std::min({ay, by, cy})));
-    max_y = static_cast<int>(std::ceil (std::max({ay, by, cy})));
-
-    // Clamp to the screen. Without this, an off-screen vertex indexes
-    // outside the vector and corrupts memory.
-    min_x = std::max(min_x, 0);
-    min_y = std::max(min_y, 0);
-    max_x = std::min(max_x, VIEWPORT_WIDTH  - 1);
-    max_y = std::min(max_y, VIEWPORT_HEIGHT - 1);
-}
 
 
 
@@ -52,46 +36,6 @@ void bounding_box(float ax, float ay, float bx, float by, float cx, float cy,
 
 
 
-void drawTriangle(const screenVertex& A, const screenVertex& B, const screenVertex& C) { 
-
-  int min_x, min_y, max_x, max_y;
-  bounding_box(A.x, A.y, B.x, B.y, C.x, C.y, min_x, min_y, max_x, max_y);
-  float area = edge_function(A.x, A.y, B.x, B.y, C.x, C.y);
-
-   for (int y = min_y; y <= max_y; ++y)
-      {
-        for (int x = min_x; x <= max_x; ++x)
-        {
-          float w0 = edge_function(B.x, B.y, C.x, C.y, x+0.5f, y+0.5f); //+0.5f to sample at pixel center
-          float w1 = edge_function(C.x, C.y, A.x, A.y, x+0.5f, y+0.5f);
-          float w2 = edge_function(A.x, A.y, B.x, B.y, x+0.5f, y+0.5f);
-
-          bool inside = (w0 >= 0 && w1 >= 0 && w2 >= 0) ||
-              (w0 <= 0 && w1 <= 0 && w2 <= 0);
-
-          if (inside) { // cross product order matters
-             w0 = w0 / area; //wo,w1,w2 are also x2 areas of the subtriangles respectively
-              w1 = w1 / area;
-              w2 = w2 / area;
-            float z = w0 * A.z + w1 * B.z + w2 * C.z; //Interpolate the depth value for the pixel (x,y) using barycentric coordinates
-            if(z<zbuffer[y * VIEWPORT_WIDTH + x]){ //Depth test
-              zbuffer[y * VIEWPORT_WIDTH + x] = z; //Update the z-buffer
-             
-
-              //wo,w1,w2 now form the barycentric coordinates of the pixel (x,y) with respect to the triangle ABC   
-            
-            //Barycentric interpolation of the color of the pixel (x,y) using the barycentric coordinates and the colors of the vertices              
-              framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(w0 * A.color.r + w1 * B.color.r + w2 * C.color.r),
-                                                      uint8_t(w0 * A.color.g + w1 * B.color.g + w2 * C.color.g),
-                                                      uint8_t(w0 * A.color.b + w1 * B.color.b + w2 * C.color.b)}; //interpolated color for triangle
-
-              }
-                                }
-        }
-      }
-
-
-}
 
 
 

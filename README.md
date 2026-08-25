@@ -290,10 +290,19 @@ interpolating depth matters**: interpolating with the raw weights scales `z` by
 the triangle's area, making the depth test area-dependent. It looks correct on
 simple scenes by coincidence and fails on interpenetrating geometry.
 
-The bounding box is clamped to the viewport, and that clamp is load-bearing —
-`drawTriangle`'s buffer writes are unchecked, so an off-screen vertex without it
-indexes past the end of the vector and corrupts memory rather than raising an
-error.
+The generated docs are also published to
+**[hrishikesh-acharyya.github.io/Rasterizer_Simulator](https://hrishikesh-acharyya.github.io/Rasterizer_Simulator/)**
+on every push to `main` that touches a source file or the `Doxyfile`
+([`pages.yml`](.github/workflows/pages.yml)), so reading them needs no local
+install at all.
+
+The generated docs are worth the two-minute install: alongside the prose from
+the headers, Doxygen draws the **include graph** for every file (both
+directions — what it pulls in, and what depends on it), a **collaboration
+graph** per struct, and a **call/caller graph** per function. The last one is
+the useful one here: it shows the fan-out from the render loop down to the
+per-pixel inner loop, which is the same fan-out the hardware has to pipeline.
+Output lands in `docs/html/index.html`; `docs/` is gitignored.
 
 ## 6. Depth
 
@@ -376,55 +385,33 @@ threaded:
 
 Roughly 80% of the run is file I/O. Worth knowing before optimising the inner
 loop: at this resolution the renderer is bound by getting bytes out, not by
-computing them.
+computing them. The same shape shows up one level down — every fragment costs a
+depth read, and only survivors cost a depth write plus a colour write, with no
+reuse between them. Streaming, not caching. That traffic is why real hardware
+spends transistors on hierarchical-Z and depth compression rather than on more
+ALUs.
 
----
+## What CI checks
 
-## Build and run
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push:
 
-Needs a C++17 compiler and nothing else. The Makefile works on Windows
-(cmd.exe + MinGW `mingw32-make`) and on Linux/macOS, selecting the right shell
-and file-removal commands from `$(OS)`.
+- **Builds with `g++` and `clang++`** under `-Wall -Wextra -Werror`. Two
+  compilers because they disagree about what is worth warning on, and the
+  disagreements are usually the interesting ones. `-Werror` lives in CI rather
+  than the Makefile so a warning stops a merge without stopping someone
+  mid-edit.
+- **Renders all 120 frames and validates them**: the file count, the exact byte
+  size (`1920 × 1080 × 3` plus a 17-byte header = 6,220,817), a `P6` magic
+  number, and that frame 30 contains more than 16 distinct channel values. That
+  last one is the useful check — a broken transform or an empty draw loop still
+  writes 120 perfectly well-formed files, all of them flat grey.
+- **Builds the docs and the graph sources**, and uploads the generated HTML as
+  an artifact. A second workflow, [`pages.yml`](.github/workflows/pages.yml),
+  publishes that HTML to GitHub Pages on pushes to `main`.
 
-```bash
-make            # build -> renderer (renderer.exe on Windows)
-make run        # build, clear stale frames, render 120 frames into frames/
-make video      # run, then encode an mp4        (needs ffmpeg)
-make gif        # run, then encode a gif         (needs ffmpeg)
-make docs       # doxygen HTML into docs/html/   (needs doxygen + graphviz)
-make graphs     # redraw the README graphs       (needs graphviz)
-make clean
-```
-
-Without make:
-
-```bash
-g++ -std=c++17 -Wall -Wextra -O2 main.cpp framebuffer.cpp raster.cpp model.cpp -o renderer
-mkdir frames && ./renderer
-```
-
-**Paths resolve from the working directory**, so run from the repository root —
-`main.cpp` loads `Media/Obj_files/torus.obj`. Change that line to swap models;
-`icosphere.obj` and `test.obj` (a cube) are also there.
-
-**`frames/` gets large.** At 1920×1080 one P6 PPM is 6.2 MB and a 120-frame run
-writes 713 MB. It is gitignored, and `make run` clears it first — a leftover
-frame the new run does not overwrite would silently appear in the video and look
-like a rendering bug.
-
-### Docs and CI
-
-The generated Doxygen HTML is published to
-**[hrishikesh-acharyya.github.io/Rasterizer_Simulator](https://hrishikesh-acharyya.github.io/Rasterizer_Simulator/)**
-on every push to `main` that touches a source file. It carries the design notes
-from the headers plus automatically generated include, collaboration and call
-graphs.
-
-[CI](.github/workflows/ci.yml) builds with `g++` and `clang++` under
-`-Wall -Wextra -Werror`, renders all 120 frames, and validates them — file count,
-exact byte size, `P6` magic, and that a frame contains more than 16 distinct
-channel values, since a broken transform still writes perfectly well-formed files
-full of flat grey.
+Doxygen warnings are printed and kept but do not fail the job: a doxygen
+version bump can deprecate a tag and produce a warning that says nothing about
+this code. A non-zero exit or a missing `index.html` does fail.
 
 ## Known gaps
 

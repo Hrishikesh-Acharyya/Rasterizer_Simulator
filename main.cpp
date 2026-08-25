@@ -10,10 +10,10 @@
 #include <sstream>
 #include "vectors.h"
 #include "matrices.h"
+#include "framebuffer.h"
 
-static const int VIEWPORT_WIDTH  = 1920;
-static const int VIEWPORT_HEIGHT = 1080;
-static const int no_of_pixels =   VIEWPORT_HEIGHT*VIEWPORT_WIDTH; 
+
+ 
 static const float FOV = 60;
 
 
@@ -43,21 +43,15 @@ void bounding_box(float ax, float ay, float bx, float by, float cx, float cy,
     max_x = std::min(max_x, VIEWPORT_WIDTH  - 1);
     max_y = std::min(max_y, VIEWPORT_HEIGHT - 1);
 }
-struct RGB{
 
-uint8_t r;
-uint8_t g;
-uint8_t b;
-};
-static_assert(sizeof(RGB) == 3, "RGB must be tightly packed");
+
 
 struct screenVertex{
 float x,y,z;
 RGB color;
 };
 
-std::vector<RGB> framebuffer(no_of_pixels);//Each RGB struct is one pixel
-std::vector<float> zbuffer(no_of_pixels, std::numeric_limits<float>::infinity()); //Initialize z-buffer to infinity
+
 
 
 
@@ -108,37 +102,6 @@ void drawTriangle(const screenVertex& A, const screenVertex& B, const screenVert
 
 
 
-
-
-
-
-
-void clearframeBuffer() {
-    for (int y = 0; y < VIEWPORT_HEIGHT; ++y) {
-        for (int x = 0; x < VIEWPORT_WIDTH; ++x) {
-            framebuffer[y * VIEWPORT_WIDTH + x] = {uint8_t(125), uint8_t(125), uint8_t(125)}; //grey color map generation
-        }
-    }
-}
-
-void clearZBuffer() {
-    for(int i = 0; i<no_of_pixels; i++)
-    {
-        zbuffer[i] = std::numeric_limits<float>::infinity(); //Reset z-buffer to infinity
-    }
-}
-
-void writeFramebufferToPPM(const std::string& filename) {
-    FILE* f = std::fopen(filename.c_str(), "wb");
-    if (f == nullptr) {
-        std::cout << "Error: Could not open " << filename << " for writing." << std::endl;
-        return;
-    }
-
-    fprintf(f, "P6\n%d %d\n255\n", VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
-    fwrite(reinterpret_cast<const char*>(framebuffer.data()), sizeof(RGB), no_of_pixels, f);
-    fclose(f);
-}
 
 /*
 Loads an OBJ file into a vertex list and a flat index list.
@@ -208,7 +171,7 @@ std::vector<float> normalizationPass(const std::vector<Vec4>& obj_verts)
     float max_y = std::numeric_limits<float>::lowest();
     float max_z = std::numeric_limits<float>::lowest();
 
-    for (int i = 0; i<obj_verts.size(); ++i) {
+    for (size_t i = 0; i<obj_verts.size(); ++i) {
         min_x = std::min(min_x, static_cast<float>(obj_verts[i].x));
         min_y = std::min(min_y, static_cast<float>(obj_verts[i].y));
         min_z = std::min(min_z, static_cast<float>(obj_verts[i].z));
@@ -261,7 +224,7 @@ int main() {
 
 std::vector<Vec4> obj_verts;
 std::vector<int> obj_indices;
-if (!loadOBJ("torus.obj", obj_verts, obj_indices)) {
+if (!loadOBJ("Media/Obj_files/torus.obj", obj_verts, obj_indices)) {
     return 1; // Exit if the OBJ file could not be loaded
 }
 std::vector<screenVertex> screen_verts(obj_verts.size()); //To store the transformed vertices in screen space
@@ -341,8 +304,8 @@ Vec3 lightDir = normalize_Vec3({1.0f, 1.0f, 1.0f}); //pointing towards camera in
 
 
 for(int frame = 0; frame < 120; ++frame) {
-    clearframeBuffer();
-    clearZBuffer();
+    clear_frameBuffer();
+    clear_zBuffer();
     
     float angle = frame * (PI / 60.0f); //3 degree rotation per
     Mat4 rotationxMatrix, rotationyMatrix, rotationzMatrix;

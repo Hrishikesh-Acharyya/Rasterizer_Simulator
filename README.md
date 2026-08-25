@@ -174,6 +174,12 @@ make clean      # remove objects and the executable
 `Doxyfile` to build the HTML without them. None of it is required to build or
 render.
 
+The generated docs are also published to
+**[hrishikesh-acharyya.github.io/Rasterizer_Simulator](https://hrishikesh-acharyya.github.io/Rasterizer_Simulator/)**
+on every push to `main` that touches a source file or the `Doxyfile`
+([`pages.yml`](.github/workflows/pages.yml)), so reading them needs no local
+install at all.
+
 The generated docs are worth the two-minute install: alongside the prose from
 the headers, Doxygen draws the **include graph** for every file (both
 directions — what it pulls in, and what depends on it), a **collaboration
@@ -234,7 +240,8 @@ ALUs.
   last one is the useful check — a broken transform or an empty draw loop still
   writes 120 perfectly well-formed files, all of them flat grey.
 - **Builds the docs and the graph sources**, and uploads the generated HTML as
-  an artifact.
+  an artifact. A second workflow, [`pages.yml`](.github/workflows/pages.yml),
+  publishes that HTML to GitHub Pages on pushes to `main`.
 
 Doxygen warnings are printed and kept but do not fail the job: a doxygen
 version bump can deprecate a tag and produce a warning that says nothing about

@@ -1,5 +1,7 @@
 # Software Rasterizer
 
+[![CI](https://github.com/Hrishikesh-Acharyya/Rasterizer_Simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/Hrishikesh-Acharyya/Rasterizer_Simulator/actions/workflows/ci.yml)
+
 A 3D triangle rasterizer written from scratch in C++ — no OpenGL, no Vulkan, no
 graphics library of any kind. The only drawing primitive in the whole program is
 "write three bytes into an array". Everything above that — perspective
@@ -43,34 +45,32 @@ types.h           RGB and screenVertex                          (no dependencies
 framebuffer.h/cpp colour + depth buffers, clears, PPM output
 raster.h/cpp      edge function, bounding box, drawTriangle
 model.h/cpp       OBJ loader and bounding-box measurement
-Makefile          build, render, encode video/GIF, build docs
+Makefile          build, render, encode video/GIF, build docs and graphs
 Doxyfile          optional HTML docs from the header comments
-Media/            Obj_files, Videos, Gifs, png_files
+Media/            Obj_files, Videos, Gifs, png_files, Graphs
+.github/          CI workflow, PR template, dependabot
 ```
 
 The include graph is kept a DAG on purpose — each `.cpp` can be compiled and
-tested in isolation, which is what a testbench needs. `make docs` draws this
-per file and in both directions; the summary is:
+tested in isolation, which is what a testbench needs. An arrow reads
+"includes":
 
-```mermaid
-graph TD
-    vectors[vectors.h] --> matrices[matrices.h]
-    vectors --> model[model.h]
-    types[types.h] --> framebuffer[framebuffer.h]
-    types --> raster[raster.h]
-    matrices --> main[main.cpp]
-    model --> main
-    framebuffer --> main
-    raster --> main
-    framebuffer -.-> rastercpp[raster.cpp]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/Graphs/include_graph_dark.png">
+  <img src="Media/Graphs/include_graph_light.png" alt="Module include graph" width="820">
+</picture>
 
 `vectors.h` and `types.h` sit at the bottom and include nothing from the
 project. `raster.h` deliberately does not include `framebuffer.h` — a caller
 needs to know what a `screenVertex` is, not that a global framebuffer exists.
 `raster.cpp` does include it, because the implementation writes to those
-globals. Interface and binding are different edges, and separating them is what
-would let the rasterizer be pointed at a caller-supplied buffer later.
+globals (the dashed edge). Interface and binding are different edges, and
+separating them is what would let the rasterizer be pointed at a
+caller-supplied buffer later.
+
+The graph above is drawn from [`Media/Graphs/include_graph.dot`](Media/Graphs/include_graph.dot)
+by `make graphs`. `make docs` additionally generates one of these per file,
+in both directions, from the source itself.
 
 ## The pipeline
 
@@ -104,9 +104,17 @@ framebuffer -> writeFramebufferToPPM()
 ```
 
 The vertex loop runs 800 times per frame, the triangle loop 1600 times, and the
-rasterizer's inner loop once per covered pixel — millions. That widening ratio
-is the shape of the whole problem, and it is why the fixed-function hardware
-sits at the wide end.
+rasterizer's inner loop once per covered pixel — millions. Node width below is
+drawn in proportion:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/Graphs/work_amplification_dark.png">
+  <img src="Media/Graphs/work_amplification_light.png" alt="Work per stage, per frame" width="600">
+</picture>
+
+That widening is the whole architectural argument. Work at the narrow end is
+worth doing carefully once per vertex; work at the wide end has to be cheap,
+uniform and parallel — which is the shape of fixed-function hardware.
 
 ### Coverage
 
@@ -156,6 +164,7 @@ make run        # build, clear stale frames, render 120 frames into frames/
 make video      # run, then encode Media/Videos/torus_gouraud_shading.mp4
 make gif        # run, then encode Media/Gifs/torus_gouraud_shading.gif
 make docs       # doxygen HTML into docs/html/index.html  (optional)
+make graphs     # redraw the README's graph images from Media/Graphs/*.dot
 make clean      # remove objects and the executable
 ```
 
@@ -209,6 +218,27 @@ depth read, and only survivors cost a depth write plus a colour write, with no
 reuse between them. Streaming, not caching. That traffic is why real hardware
 spends transistors on hierarchical-Z and depth compression rather than on more
 ALUs.
+
+## What CI checks
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push:
+
+- **Builds with `g++` and `clang++`** under `-Wall -Wextra -Werror`. Two
+  compilers because they disagree about what is worth warning on, and the
+  disagreements are usually the interesting ones. `-Werror` lives in CI rather
+  than the Makefile so a warning stops a merge without stopping someone
+  mid-edit.
+- **Renders all 120 frames and validates them**: the file count, the exact byte
+  size (`1920 × 1080 × 3` plus a 17-byte header = 6,220,817), a `P6` magic
+  number, and that frame 30 contains more than 16 distinct channel values. That
+  last one is the useful check — a broken transform or an empty draw loop still
+  writes 120 perfectly well-formed files, all of them flat grey.
+- **Builds the docs and the graph sources**, and uploads the generated HTML as
+  an artifact.
+
+Doxygen warnings are printed and kept but do not fail the job: a doxygen
+version bump can deprecate a tag and produce a warning that says nothing about
+this code. A non-zero exit or a missing `index.html` does fail.
 
 ## Known gaps
 

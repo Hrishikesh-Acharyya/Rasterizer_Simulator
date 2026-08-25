@@ -1,0 +1,97 @@
+name: CI
+
+# Push and PR on any branch. The renderer has no dependencies beyond a C++17
+# compiler, so there is nothing to cache and nothing to install for the build
+# job -- it is fast enough to run on everything.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: build (${{ matrix.cxx }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cxx: [g++, clang++]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # -Werror here and not in the Makefile on purpose: a warning should stop
+      # CI, but it should not stop someone mid-edit on their own machine.
+      # Two compilers because they disagree about what is worth warning on, and
+      # the disagreements are usually the interesting ones.
+      - name: Build
+        run: make CXX=${{ matrix.cxx }} CXXFLAGS="-std=c++17 -Wall -Wextra -Werror -O2"
+
+      - name: Render
+        run: |
+          mkdir -p frames
+          ./renderer
+
+      # Checks the output is actually an image and not 713 MB of zeroes. A P6
+      # header, the exact byte count for 1920x1080x3 plus a 17-byte header, and
+      # one frame that is not a single flat colour -- which is what a broken
+      # transform or an empty draw loop would produce while still writing
+      # perfectly well-formed files.
+      - name: Validate output
+        run: |
+          count=$(ls frames/*.ppm | wc -l)
+          echo "frames: $count"
+          test "$count" -eq 120
+
+          size=$(stat -c%s frames/030.ppm)
+          echo "frame size: $size"
+          test "$size" -eq 6220817
+
+          head -c 2 frames/030.ppm | grep -q 'P6'
+
+          distinct=$(tail -c +18 frames/030.ppm | od -An -tu1 -v | tr -s ' ' '\n' \
+                     | grep -v '^$' | sort -u | wc -l)
+          echo "distinct channel values: $distinct"
+          test "$distinct" -gt 16
+
+      - name: Free the frames
+        if: always()
+        run: rm -rf frames
+
+  docs:
+    name: docs and graphs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doxygen and graphviz
+        run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
+
+      # Warnings are printed and uploaded rather than failing the job: a
+      # doxygen version bump can deprecate a tag and produce a warning that says
+      # nothing about this code. A non-zero exit or a missing index.html does
+      # fail, because that means the docs did not build at all.
+      - name: Build docs
+        run: |
+          doxygen Doxyfile 2>doxygen-warnings.txt
+          cat doxygen-warnings.txt
+          test -f docs/html/index.html
+
+      # Renders the graph sources to a scratch directory. This checks the .dot
+      # files are valid, without comparing against the committed PNGs -- those
+      # are not byte-reproducible across graphviz versions, so diffing them
+      # would fail for reasons that have nothing to do with the graphs.
+      - name: Render graph sources
+        run: |
+          mkdir -p /tmp/graphcheck
+          for f in Media/Graphs/*.dot; do
+            echo "rendering $f"
+            dot -Tpng "$f" -o "/tmp/graphcheck/$(basename "$f" .dot).png"
+          done
+
+      - name: Upload docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: doxygen-html
+          path: docs/html
+          retention-days: 14

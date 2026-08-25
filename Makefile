@@ -71,10 +71,31 @@ gif: run
 docs:
 	doxygen Doxyfile
 
+# Graph images for the README, drawn from the .dot sources in Media/Graphs.
+# Two variants per graph so the README can serve the right one for the reader's
+# GitHub theme. The colours are passed on the command line rather than written
+# into the .dot files, so one source produces both.
+#
+# The backslashes before each # are required: an unescaped # starts a comment
+# in a Makefile and would truncate the colour.
+GRAPH_LIGHT := -Gbgcolor=transparent -Nfillcolor=\#eef2f7 -Ncolor=\#4a5568 \
+               -Nfontcolor=\#1a202c -Ecolor=\#5a6a7d -Efontcolor=\#3d4a5c \
+               -Gfontcolor=\#3d4a5c -Gcolor=\#94a3b8
+GRAPH_DARK  := -Gbgcolor=transparent -Nfillcolor=\#2c3440 -Ncolor=\#8fa3bd \
+               -Nfontcolor=\#e8eef6 -Ecolor=\#93a7c0 -Efontcolor=\#c2d0e0 \
+               -Gfontcolor=\#c2d0e0 -Gcolor=\#7b8da3
+GRAPH_DIR   := Media/Graphs
+
+graphs:
+	dot -Tpng -Gdpi=140 $(GRAPH_LIGHT) $(GRAPH_DIR)/include_graph.dot -o $(GRAPH_DIR)/include_graph_light.png
+	dot -Tpng -Gdpi=140 $(GRAPH_DARK)  $(GRAPH_DIR)/include_graph.dot -o $(GRAPH_DIR)/include_graph_dark.png
+	dot -Tpng -Gdpi=140 $(GRAPH_LIGHT) $(GRAPH_DIR)/work_amplification.dot -o $(GRAPH_DIR)/work_amplification_light.png
+	dot -Tpng -Gdpi=140 $(GRAPH_DARK)  $(GRAPH_DIR)/work_amplification.dot -o $(GRAPH_DIR)/work_amplification_dark.png
+
 clean:
 	@$(RM_OBJECTS)
 	@$(RM_TARGET)
 
 # These are command names, not files to build. Without this, a file named
 # "clean" in the directory would make `make clean` do nothing.
-.PHONY: all run video gif docs clean
+.PHONY: all run video gif docs graphs clean

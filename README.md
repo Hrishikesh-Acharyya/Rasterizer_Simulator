@@ -20,9 +20,9 @@ a memory-bandwidth problem.
 
 | | |
 |---|---|
-| <img src="Media/Gifs/spinning_cube.gif" width="380"><br>**Spinning cube** — 8 vertices, 12 triangles, vertex colours interpolated across each face. | <img src="Media/Gifs/torus.gif" width="380"><br>**Torus, unlit** — loaded from OBJ, coloured by position within its bounding box. |
-| <img src="Media/Gifs/icosphere_lambertian_lighting.gif" width="380"><br>**Icosphere, flat shaded** — one normal per triangle. The facets are the geometry being honest. | <img src="Media/Gifs/icosphere_gouraud_shading.gif" width="380"><br>**Icosphere, Gouraud shaded** — same 320 triangles, normals averaged per vertex and interpolated across the face. |
-| <img src="Media/Gifs/torus_lambertian_lighting.gif" width="380"><br>**Torus, flat shaded** — visible banding along every triangle edge. | <img src="Media/Gifs/torus_gouraud_shading.gif" width="380"><br>**Torus, Gouraud shaded** — the banding is gone without adding a single triangle. |
+| <img src="Media/Gifs/spinning_cube.gif" alt="Spinning cube, vertex colours interpolated across each face" width="380"><br>**Spinning cube** — 8 vertices, 12 triangles, vertex colours interpolated across each face. | <img src="Media/Gifs/torus.gif" alt="Unlit torus coloured by position within its bounding box" width="380"><br>**Torus, unlit** — loaded from OBJ, coloured by position within its bounding box. |
+| <img src="Media/Gifs/icosphere_lambertian_lighting.gif" alt="Flat-shaded icosphere showing triangle facets" width="380"><br>**Icosphere, flat shaded** — one normal per triangle. The facets are the geometry being honest. | <img src="Media/Gifs/icosphere_gouraud_shading.gif" alt="Gouraud-shaded icosphere, facets smoothed away" width="380"><br>**Icosphere, Gouraud shaded** — same 320 triangles, normals averaged per vertex and interpolated across the face. |
+| <img src="Media/Gifs/torus_lambertian_lighting.gif" alt="Flat-shaded torus with banding along triangle edges" width="380"><br>**Torus, flat shaded** — visible banding along every triangle edge. | <img src="Media/Gifs/torus_gouraud_shading.gif" alt="Gouraud-shaded torus with the banding gone" width="380"><br>**Torus, Gouraud shaded** — the banding is gone without adding a single triangle. |
 
 The two right-hand renders are the whole argument for per-vertex normals: the
 mesh is identical, only where the lighting is evaluated changed. Full-resolution
@@ -32,7 +32,7 @@ versions are in [`Media/Videos/`](Media/Videos).
 
 | | | | |
 |---|---|---|---|
-| <img src="Media/png_files/output.png" width="180"> | <img src="Media/png_files/triangle.png" width="180"> | <img src="Media/png_files/Overlappingtriangle.png" width="180"> | <img src="Media/png_files/Cube.png" width="180"> |
+| <img src="Media/png_files/output.png" alt="Colour gradient written straight to a PPM file" width="180"> | <img src="Media/png_files/triangle.png" alt="Single triangle filled by the edge function" width="180"> | <img src="Media/png_files/Overlappingtriangle.png" alt="Two overlapping triangles resolved by the z-buffer" width="180"> | <img src="Media/png_files/Cube.png" alt="Cube under perspective projection" width="180"> |
 | Framebuffer plumbing: a gradient written straight to a PPM file. | One triangle, filled by the edge function, coloured by barycentric weights. | Two triangles at different depths — the z-buffer decides per pixel. | A cube under perspective projection. |
 
 ## Repository layout

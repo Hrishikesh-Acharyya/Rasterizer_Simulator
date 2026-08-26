@@ -207,15 +207,15 @@ int main() {
             // Positions go through the full MVP, which already includes
             // world_space -- transforming a world-space vertex here would apply
             // the model matrix twice.
-            Vec3 transformed = perspectiveTransform(obj_verts[i], mvp);
+            Vec4 transformed_NDC_and_inv_w = perspectiveTransform(obj_verts[i], mvp);
 
             // Viewport transform: NDC [-1,1] -> pixel coordinates. Y is flipped
             // because NDC has +Y up while framebuffer row 0 is the top of the
             // screen. Kept in floats -- rounding to integers here would quantise
             // geometry and cost sub-pixel accuracy.
-            screen_verts[i] = { (transformed.x + 1.0f) * 0.5f * VIEWPORT_WIDTH,
-                                (1.0f - (transformed.y + 1.0f) * 0.5f) * VIEWPORT_HEIGHT,
-                                transformed.z,
+            screen_verts[i] = { (transformed_NDC_and_inv_w.x + 1.0f) * 0.5f * VIEWPORT_WIDTH,
+                                (1.0f - (transformed_NDC_and_inv_w.y + 1.0f) * 0.5f) * VIEWPORT_HEIGHT,
+                                transformed_NDC_and_inv_w.z, transformed_NDC_and_inv_w.w,
                                 obj_colors[i] };
         }
 

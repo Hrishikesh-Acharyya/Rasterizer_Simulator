@@ -243,7 +243,8 @@ inline Vec4 transform_Vec4(const Mat4& mat, const Vec4& vec) {
 
 
 /**
- * @brief Apply m to vertex, then perform the perspective divide. Returns NDC.
+ * @brief Apply m to a vertex, perform the perspective divide, return NDC
+ *        position plus the reciprocal of clip-space w.
  *
  * Two distinct steps that are easy to conflate:
  *   1. transform to CLIP space (a 4D homogeneous point, w != 1)
@@ -256,17 +257,22 @@ inline Vec4 transform_Vec4(const Mat4& mat, const Vec4& vec) {
  * multiplying three times, as done here, is the standard trade: 1 divide + 3
  * multiplies beats 3 divides.
  *
+ * The fourth component of the result is that same 1/w, forwarded rather than
+ * discarded. The divide destroys w, but perspective-correct interpolation
+ * downstream needs it, so it rides along to the rasterizer in screenVertex.
+ * Note it is 1/w and NOT the homogeneous w a Vec4 usually carries in that slot.
+ *
  * The 1e-8f guard catches w ~= 0, which means the vertex is on or behind the
  * eye plane where projection is undefined (it would map to infinity). Returning
- * the origin is a placeholder, NOT correct behaviour -- the real fix is
- * near-plane clipping before the divide. Currently unhit because the camera
- * sits outside the model; will break the moment the camera moves inside one.
+ * the origin with 1/w = 0 is a placeholder, NOT correct behaviour -- the real
+ * fix is near-plane clipping before the divide. Currently unhit because the
+ * camera sits outside the model; will break the moment it moves inside one.
  */
 
-inline Vec3 perspectiveTransform(const Vec4& vertex, const Mat4& m) {
+inline Vec4 perspectiveTransform(const Vec4& vertex, const Mat4& m) {
     Vec4 clip = transform_Vec4(m, vertex);
     float inv_w = (std::fabs(clip.w) > 1e-8f) ? 1.0f / clip.w : 0.0f;
-    return { clip.x * inv_w, clip.y * inv_w, clip.z * inv_w };
+    return { clip.x * inv_w, clip.y * inv_w, clip.z * inv_w,inv_w };
 }
 
 

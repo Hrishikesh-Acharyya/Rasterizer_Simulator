@@ -56,12 +56,23 @@ static_assert(sizeof(RGB) == 3, "RGB must be tightly packed");
  * (x + 0.5, y + 0.5). Rounding vertices to integers here would quantise
  * geometry and break sub-pixel accuracy.
  *
- * z is post-perspective-divide NDC depth, used for the depth test only.
+ * z is post-divide NDC depth, used for the depth test only. Near maps to -1
+ * and far to +1, so the smaller value is the nearer fragment.
  *
- * */
+ * rec_w is the reciprocal of the clip-space w that produced x, y and z -- the
+ * one piece of pre-divide information the rasterizer still needs, since
+ * perspective-correct attribute interpolation is a weighted average of 1/w.
+ * Stored as the reciprocal, not w, because it is computed once per vertex
+ * inside perspectiveTransform and would otherwise be recomputed once per
+ * FRAGMENT. Three reciprocals per triangle against one per pixel.
+ *
+ * This is the vertex format a hardware fetch unit would read: four floats and
+ * three bytes, POD, flat, no indirection.
+ */
 
 struct screenVertex{
-float x,y,z;
+float x,y,z,rec_w;
 RGB color;
+
 };
 

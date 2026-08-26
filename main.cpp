@@ -26,6 +26,9 @@
 #include "raster.h"
 #include "model.h"
 
+// extern int g_tris_culled;
+// extern int g_tris_drawn;
+
 constexpr float FOV = 60.0f;          // vertical field of view, DEGREES
 constexpr int   FRAME_COUNT = 120;
 constexpr float NEAR_PLANE = 0.1f;
@@ -162,6 +165,11 @@ int main() {
 
     for (int frame = 0; frame < FRAME_COUNT; ++frame) {
 
+//         if (frame == 1) {
+//     std::printf("culled %d, drawn %d (%.1f%%)\n",
+//                 g_tris_culled, g_tris_drawn,
+//                 100.0f * g_tris_culled / (g_tris_culled + g_tris_drawn));
+// }
         clear_frameBuffer();
         clear_zBuffer();   // must precede rendering, or last frame's depths
                            // reject this frame's fragments
@@ -253,6 +261,7 @@ int main() {
                         std::uint8_t(C.color.g * intensityC),
                         std::uint8_t(C.color.b * intensityC) };
 
+          
             drawTriangle(A, B, C);
         }
 

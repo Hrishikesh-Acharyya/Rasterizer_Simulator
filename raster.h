@@ -33,11 +33,17 @@ void bounding_box(float ax, float ay, float bx, float by, float cx, float cy,
                   int& min_x, int& min_y, int& max_x, int& max_y);
 
 /**
- * @brief Rasterize one triangle into the global framebuffer and zbuffer.
+ * @brief Rasterize one screen-space triangle into the framebuffer.
  *
- * Samples at pixel centres. Winding-agnostic: accepts either winding order, so
- * back-facing triangles are drawn and culling must happen upstream.
+ * @param A,B,C  Screen-space vertices: x,y in pixels, z in NDC, plus colour.
  *
- * Expects x, y in screen coordinates and z as post-divide NDC depth.
+ * Back-facing triangles are discarded before any per-pixel work, as are
+ * degenerate ones with zero projected area.
+ *
+ * @warning Requires CONSISTENT WINDING across the mesh. Facing is decided from
+ *          the sign of the signed screen-space area, so a mesh wound the
+ *          opposite way is culled in its entirety and renders black. OBJ
+ *          specifies counter-clockwise front faces, but exporters are
+ *          unreliable and a negative scale reverses every triangle.
  */
 void drawTriangle(const screenVertex& A, const screenVertex& B, const screenVertex& C);

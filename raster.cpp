@@ -13,6 +13,10 @@
 #include <cstdint>     // std::uint8_t
 #include <cmath>       // std::floor, std::ceil
 
+// // Instrumentation only. Not thread-safe and not part of the interface -- these
+// // come out once the cull rate is confirmed.
+// int g_tris_culled = 0;
+// int g_tris_drawn  = 0;
 /**
  * Two multiplies and five adds. No division, no branch, no memory access.
  *
@@ -62,12 +66,27 @@ void bounding_box(float ax, float ay, float bx, float by, float cx, float cy,
  */
 void drawTriangle(const screenVertex& A, const screenVertex& B, const screenVertex& C) {
 
+// Signed area of the whole triangle: the normalising denominator for the
+// barycentric weights below.
+    float area = edge_function(A.x, A.y, B.x, B.y, C.x, C.y);
+
+// Backface cull. The sign of the signed area is the triangle's winding as seen
+// from the camera; measured negative for front-facing geometry in this
+// pipeline (OBJ's CCW convention, reversed by the viewport Y flip). Requires
+// consistent winding across the mesh -- a mesh wound the other way culls
+// entirely and renders black.
+//
+// >= also drops degenerate zero-area triangles, which would divide by zero
+// when normalising the barycentric weights below.
+    if (area >= 0.0f){
+        //++g_tris_culled; 
+        return;}
+
     int min_x, min_y, max_x, max_y;
     bounding_box(A.x, A.y, B.x, B.y, C.x, C.y, min_x, min_y, max_x, max_y);
 
-    // Signed area of the whole triangle: the normalising denominator for the
-    // barycentric weights below.
-    float area = edge_function(A.x, A.y, B.x, B.y, C.x, C.y);
+    
+  
 
     for (int y = min_y; y <= max_y; ++y) {
         for (int x = min_x; x <= max_x; ++x) {

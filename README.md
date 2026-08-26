@@ -24,9 +24,13 @@ become a fixed-point number.
 | <img src="Media/Gifs/icosphere_lambertian_lighting.gif" alt="Flat-shaded icosphere showing triangle facets" width="380"><br>**Icosphere, flat shaded** — one normal per triangle. The facets are the geometry being honest. | <img src="Media/Gifs/icosphere_gouraud_shading.gif" alt="Gouraud-shaded icosphere, facets smoothed away" width="380"><br>**Icosphere, Gouraud shaded** — same 320 triangles, normals averaged per vertex. |
 | <img src="Media/Gifs/torus_lambertian_lighting.gif" alt="Flat-shaded torus with banding along triangle edges" width="380"><br>**Torus, flat shaded** — visible banding along every triangle edge. | <img src="Media/Gifs/torus_gouraud_shading.gif" alt="Gouraud-shaded torus with the banding gone" width="380"><br>**Torus, Gouraud shaded** — the banding is gone without adding a single triangle. |
 
-The right-hand column is the whole argument for per-vertex normals: identical
-meshes, identical triangle counts, only *where the lighting is evaluated*
-changed. Full-resolution versions are in [`Media/Videos/`](Media/Videos).
+The right-hand column is the whole argument for per-vertex normals. The mesh is
+identical and the triangle count is identical; what changed is the normals —
+one flat normal per face became an area-weighted average of the faces meeting at
+each vertex — and, following from that, the lighting moved from per-face to
+per-vertex with interpolation across the span. The smoothing comes from the
+normals, not from geometry. Full-resolution versions are in
+[`Media/Videos/`](Media/Videos).
 
 ## Repository layout
 
@@ -371,18 +375,27 @@ Node width is drawn in proportion. Work at the narrow end is worth doing
 carefully once per vertex; work at the wide end has to be cheap, uniform and
 parallel — which is the shape of fixed-function hardware.
 
-Measured over a full 120-frame run of the torus at 1920×1080, `-O2`, single
-threaded:
+## What it costs
+
+**The pipeline runs at ~7 ms per frame** — 1,600 triangles transformed, shaded
+and rasterized into 1920×1080, single threaded, `-O2`.
+
+That is the number worth quoting. A full 120-frame run takes ~5.1 s of wall
+clock, but only ~0.9 s of that is user time; the other ~4.2 s is the kernel
+writing 746 MB of uncompressed PPM to disk. No renderer dumps every frame to
+disk uncompressed — that is this harness, not the pipeline, and it should be
+subtracted before drawing any conclusion about where the work goes.
 
 | | |
 |---|---|
-| wall clock | ~5.1 s |
 | user (transform + raster) | ~0.9 s → **~7 ms/frame** |
-| system (writing 713 MB of PPM) | ~4.2 s |
+| system (PPM writes, harness overhead) | ~4.2 s |
+| wall clock | ~5.1 s |
 
-Roughly 80% of the run is file I/O. Worth knowing before optimising the inner
-loop: at this resolution the renderer is bound by getting bytes out, not by
-computing them.
+The measurement that would say something about the rasterizer itself is a run
+with the writes removed. The bandwidth argument in the depth section stands on
+its own and does not depend on these numbers: it is about the depth-buffer
+traffic inside the inner loop, which no amount of not-writing-files removes.
 
 ---
 
@@ -419,8 +432,8 @@ mkdir frames && ./renderer
 `main.cpp` loads `Media/Obj_files/torus.obj`. Change that line to swap models;
 `icosphere.obj` and `test.obj` (a cube) are also there.
 
-**`frames/` gets large.** At 1920×1080 one P6 PPM is 6.2 MB and a 120-frame run
-writes 713 MB. It is gitignored, and `make run` clears it first — a leftover
+**`frames/` gets large.** At 1920×1080 one P6 PPM is 6,220,817 bytes and a
+120-frame run writes 746,498,040 — 746 MB, or 712 MiB. It is gitignored, and `make run` clears it first — a leftover
 frame the new run does not overwrite would silently appear in the video and look
 like a rendering bug.
 

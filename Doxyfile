@@ -8,7 +8,11 @@ PROJECT_NAME           = "Software Rasterizer"
 PROJECT_BRIEF          = "A CPU rasterizer written from scratch, as a reference model for an RTL implementation"
 
 INPUT                  = . 
-FILE_PATTERNS          = *.h *.cpp
+# *.dox carries mainpage.dox: documentation with no code attached to it.
+# Without it Doxygen generates an index.html containing a title and
+# nothing else -- a landing page that passes a file-exists check while
+# telling a visitor nothing.
+FILE_PATTERNS          = *.h *.cpp *.dox
 RECURSIVE              = NO
 OUTPUT_DIRECTORY       = docs
 

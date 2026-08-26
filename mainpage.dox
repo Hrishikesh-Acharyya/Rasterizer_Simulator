@@ -1,0 +1,73 @@
+/**
+ * @mainpage Software Rasterizer
+ *
+ * A 3D triangle rasterizer written from scratch in C++ — no OpenGL, no Vulkan,
+ * no graphics library of any kind. The only drawing primitive in the whole
+ * program is "write three bytes into an array".
+ *
+ * It is not trying to be fast. It is a **reference model**: an executable,
+ * readable definition of what a rasterizer does, stage by stage, so that a
+ * hardware implementation has something to be diffed against. That intent is
+ * why several decisions here look over-careful — the byte-layout assertion on
+ * RGB, the POD types with predictable flat layout, and the places where a float
+ * will eventually have to become a fixed-point number.
+ *
+ * @section mainpage_pipeline The pipeline
+ *
+ * One frame, from file to pixels:
+ *
+ * 1. **Geometry in** — loadOBJ() parses `v` and `f` lines and fan-triangulates
+ *    any polygon larger than a triangle. normalizationPass() measures the
+ *    bounding box so the model can be centred and scaled to a known size.
+ * 2. **Vertex normals** — face normals are accumulated onto shared vertices
+ *    *unnormalised*, so each face contributes in proportion to its area
+ *    (cross_Vec3()'s magnitude carries that for free), then normalised once.
+ * 3. **Transform** — model, view and projection collapse into one Mat4 via
+ *    multiply_matrices(). buildPerspectiveMatrix() copies `-z` into `w` so that
+ *    perspectiveTransform() can do the divide the matrix cannot.
+ * 4. **Rasterize** — drawTriangle() walks a bounding_box() and evaluates
+ *    edge_function() three times per pixel centre. The same three values serve
+ *    as the inside test, the depth weights and the colour weights.
+ * 5. **Out** — writeFramebufferToPPM() writes the framebuffer as raw bytes,
+ *    which is why RGB's layout is asserted rather than assumed.
+ *
+ * @section mainpage_layout Where to start reading
+ *
+ * The modules are a DAG, and reading them bottom-up is the fastest way in:
+ *
+ * | File | What lives there |
+ * | ---- | ---------------- |
+ * | vectors.h    | Vec3, Vec4 and pure vector arithmetic. Depends on nothing. |
+ * | types.h      | RGB and screenVertex. Depends on nothing. |
+ * | matrices.h   | Mat4, the transform builders, and the perspective divide. |
+ * | model.h      | OBJ loading and bounding-box measurement. |
+ * | framebuffer.h| Colour and depth buffers, the clears, and PPM output. |
+ * | raster.h     | The edge function, bounding box, and drawTriangle(). |
+ * | main.cpp     | Scene setup and the per-frame render loop. |
+ *
+ * raster.h deliberately does **not** include framebuffer.h: a caller needs to
+ * know what a screenVertex is, not that a global framebuffer exists. raster.cpp
+ * does include it, because the implementation writes to those globals.
+ * Separating interface from binding is what would later let the rasterizer be
+ * pointed at a caller-supplied buffer.
+ *
+ * @section mainpage_reading Reading these pages
+ *
+ * Every file, struct and function page carries the design notes from the
+ * source, plus graphs generated from the code itself:
+ *
+ * - **Include graphs**, in both directions — what a file pulls in, and what
+ *   depends on it.
+ * - **Call and caller graphs** — the fan-out from the render loop down to the
+ *   per-pixel inner loop is the same fan-out hardware has to pipeline.
+ * - **Collaboration graphs** for each struct.
+ *
+ * Start from the Files tab, or from drawTriangle() if you want the heart of it
+ * first.
+ *
+ * @section mainpage_more Elsewhere
+ *
+ * The repository README carries the visual walkthrough — rendered animations,
+ * the flat-versus-Gouraud comparison, measured per-stage cost, the known gaps,
+ * and build instructions. These pages are the API-level companion to it.
+ */

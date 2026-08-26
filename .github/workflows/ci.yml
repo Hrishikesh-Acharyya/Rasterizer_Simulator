@@ -93,11 +93,25 @@ jobs:
       # doxygen version bump can deprecate a tag and produce a warning that says
       # nothing about this code. A non-zero exit or a missing index.html does
       # fail, because that means the docs did not build at all.
+      # Checks the landing page has CONTENT, not that the file exists. Without a
+      # @mainpage block Doxygen happily emits an index.html carrying a title and
+      # nothing else -- which passes `test -f` while telling a visitor nothing,
+      # and this site is linked from the README as somewhere worth going.
       - name: make docs
         run: |
           make docs 2>doxygen-warnings.txt || true
           cat doxygen-warnings.txt
           test -f docs/html/index.html
+          python3 - <<'PY'
+          import re, sys
+          html = open("docs/html/index.html", encoding="utf-8").read()
+          text = " ".join(re.sub(r"<[^>]+>", " ", html).split())
+          print(f"landing page: {len(text)} characters of visible text")
+          assert len(text) > 1500, "index.html is a stub -- is the @mainpage block still there?"
+          for probe in ("The pipeline", "Where to start reading"):
+              assert probe in html, f"main page is missing its '{probe}' section"
+          print("landing page has content")
+          PY
 
       # Redraws the README's graphs from their .dot sources. Checks the sources
       # are valid without comparing against the committed PNGs -- those are not
@@ -129,3 +143,111 @@ jobs:
           name: doxygen-html
           path: docs/html
           retention-days: 14
+
+  sanitizers:
+    name: address and undefined behaviour
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Worth more than a unit test here, because it finds the bugs nobody
+      # thought to write a test for. Two classes this project is exposed to by
+      # construction: unchecked framebuffer writes behind a bounding box that
+      # must be clamped, and OBJ indices taken from a file and used directly as
+      # array subscripts. ASan catches the first, UBSan the second.
+      #
+      # LIMIT: only the model main.cpp names gets rendered, so this exercises
+      # the bundled torus. It would catch a malformed downloaded mesh the day
+      # one is pointed at.
+      - name: Build with ASan and UBSan
+        run: |
+          make CXXFLAGS="-std=c++17 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer"
+
+      - name: Render under the sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          make run CXXFLAGS="-std=c++17 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer"
+
+      - name: Free the frames
+        if: always()
+        run: rm -rf frames
+
+  divergence:
+    name: -O0 vs -O2 output divergence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Renders the same frames at two optimisation levels and measures how far
+      # apart they land. Undefined behaviour is the thing that changes character
+      # across -O levels, so a large divergence here is a real signal.
+      #
+      # It is NOT an exact-match check, and that distinction is the point. With
+      # -ffp-contract=off on both builds, -O0 and -O2 still disagree on about
+      # two pixels per frame by one LSB: different instruction selection gives a
+      # last-bit difference in a float, and the truncating uint8_t cast in the
+      # colour write turns that into a whole integer step. Expected, and harmless.
+      #
+      # The same fact is why the eventual RTL comparison needs a tolerance
+      # rather than a hash: if two builds of ONE compiler from ONE source cannot
+      # agree bit-for-bit, a fixed-point pipeline certainly will not.
+      - name: Render at -O0 and -O2
+        run: |
+          for opt in O0 O2; do
+            make clean
+            make CXXFLAGS="-std=c++17 -ffp-contract=off -$opt"
+            make run CXXFLAGS="-std=c++17 -ffp-contract=off -$opt"
+            mkdir -p "cmp/$opt"
+            for f in 000 060 119; do cp "frames/$f.ppm" "cmp/$opt/"; done
+            rm -rf frames
+          done
+
+      - name: Measure the divergence
+        run: |
+          python3 - <<'PY'
+          import sys
+
+          def pixels(path):
+              data = open(path, "rb").read()
+              i = 0
+              for _ in range(3):
+                  i = data.index(b"\n", i) + 1
+              return data[i:]
+
+          MAX_DELTA    = 2        # one LSB of rounding, with a little headroom
+          MAX_FRACTION = 0.0001   # 0.01% of pixels
+
+          failed = False
+          for frame in ("000", "060", "119"):
+              a = pixels(f"cmp/O0/{frame}.ppm")
+              b = pixels(f"cmp/O2/{frame}.ppm")
+              assert len(a) == len(b), f"{frame}: frames differ in size"
+
+              count = len(a) // 3
+              differing = 0
+              worst = 0
+              for p in range(count):
+                  i = p * 3
+                  d = max(abs(a[i + c] - b[i + c]) for c in range(3))
+                  if d:
+                      differing += 1
+                  if d > worst:
+                      worst = d
+
+              fraction = differing / count
+              print(f"frame {frame}: {differing} of {count} pixels differ "
+                    f"({fraction * 100:.5f}%), max channel delta {worst}")
+
+              if worst > MAX_DELTA or fraction > MAX_FRACTION:
+                  print(f"  FAIL: beyond rounding. Suspect undefined behaviour "
+                        f"or an optimisation-sensitive bug.")
+                  failed = True
+
+          sys.exit(1 if failed else 0)
+          PY
+
+      - name: Free the frames
+        if: always()
+        run: rm -rf frames cmp

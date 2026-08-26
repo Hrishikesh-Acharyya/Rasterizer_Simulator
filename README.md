@@ -1,6 +1,7 @@
 # Software Rasterizer
 
 [![CI](https://github.com/Hrishikesh-Acharyya/Rasterizer_Simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/Hrishikesh-Acharyya/Rasterizer_Simulator/actions/workflows/ci.yml)
+[![Docs](https://github.com/Hrishikesh-Acharyya/Rasterizer_Simulator/actions/workflows/pages.yml/badge.svg)](https://hrishikesh-acharyya.github.io/Rasterizer_Simulator/)
 
 A 3D triangle rasterizer written from scratch in C++ — no OpenGL, no Vulkan, no
 graphics library of any kind. The only drawing primitive in the whole program is
@@ -37,6 +38,11 @@ types.h           RGB and screenVertex                          (no dependencies
 framebuffer.h/cpp colour + depth buffers, clears, PPM output
 raster.h/cpp      edge function, bounding box, drawTriangle
 model.h/cpp       OBJ loader and bounding-box measurement
+
+Makefile          build, render, encode video/GIF, docs, graphs
+Doxyfile          Doxygen configuration
+.github/          CI and Pages workflows, PR template, dependabot
+.gitattributes    binary file markings and language statistics
 Media/            Obj_files, Videos, Gifs, png_files, Graphs
 ```
 
@@ -57,7 +63,7 @@ rasterizer be pointed at a caller-supplied buffer instead of a global.
 
 ---
 
-# How it works
+## How it works
 
 Everything runs on the CPU, single threaded, one triangle at a time.
 
@@ -86,7 +92,7 @@ screen space
 framebuffer -> writeFramebufferToPPM()
 ```
 
-## 1. Getting geometry in
+### 1. Getting geometry in
 
 `loadOBJ` reads only `v` and `f` lines. Everything else — `vn`, `vt`, `usemtl`,
 groups, smoothing — is skipped, which is why the renderer has to synthesise its
@@ -124,7 +130,7 @@ This is correct only for **convex** faces; on a concave polygon some fan
 triangles fall outside the outline. The quads in the test models are convex.
 `torus.obj` is 800 vertices and 800 quads, so 1,600 triangles after this loop.
 
-## 2. Placing the model
+### 2. Placing the model
 
 Models arrive at arbitrary scales and offsets, so `normalizationPass` measures
 the axis-aligned bounding box and the render loop builds a matrix that centres
@@ -143,7 +149,7 @@ order-reversal is the single most common source of transform bugs.
 The normalisation is applied through the model matrix rather than baked into the
 vertex data, so the loaded geometry stays exactly as authored.
 
-## 3. Vertex normals
+### 3. Vertex normals
 
 The OBJ loader threw away any normals in the file, so they are computed from the
 geometry. For each triangle, the face normal is added to all three of its
@@ -163,7 +169,7 @@ contributes in proportion to its size — the correct area-weighted average.
 Normalising inside this loop would weight a sliver the same as a large quad.
 Normalisation happens once, after every contribution is summed.
 
-## 4. The transform chain
+### 4. The transform chain
 
 Transforms are 4×4 rather than 3×3 because translation is not a linear operation
 on 3D points and cannot be written as a 3×3 matrix product. Lifting to
@@ -241,7 +247,7 @@ screen. The coordinates stay **floats** — rounding vertices to the integer gri
 here would quantise geometry and throw away sub-pixel accuracy. Only sample
 points sit on the integer grid, which is why sampling happens at pixel centres.
 
-## 5. Rasterizing a triangle
+### 5. Rasterizing a triangle
 
 The heart of the whole program is one function evaluated three times per pixel:
 
@@ -290,21 +296,12 @@ interpolating depth matters**: interpolating with the raw weights scales `z` by
 the triangle's area, making the depth test area-dependent. It looks correct on
 simple scenes by coincidence and fails on interpenetrating geometry.
 
-The generated docs are also published to
-**[hrishikesh-acharyya.github.io/Rasterizer_Simulator](https://hrishikesh-acharyya.github.io/Rasterizer_Simulator/)**
-on every push to `main` that touches a source file or the `Doxyfile`
-([`pages.yml`](.github/workflows/pages.yml)), so reading them needs no local
-install at all.
+The bounding box is clamped to the viewport, and that clamp is load-bearing —
+`drawTriangle`'s buffer writes are unchecked, so an off-screen vertex without it
+indexes past the end of the vector and corrupts memory rather than raising an
+error.
 
-The generated docs are worth the two-minute install: alongside the prose from
-the headers, Doxygen draws the **include graph** for every file (both
-directions — what it pulls in, and what depends on it), a **collaboration
-graph** per struct, and a **call/caller graph** per function. The last one is
-the useful one here: it shows the fan-out from the render loop down to the
-per-pixel inner loop, which is the same fan-out the hardware has to pipeline.
-Output lands in `docs/html/index.html`; `docs/` is gitignored.
-
-## 6. Depth
+### 6. Depth
 
 ```cpp
 float z = w0 * A.z + w1 * B.z + w2 * C.z;
@@ -327,7 +324,7 @@ accesses per frame, and it is what makes a GPU a memory-bandwidth problem rather
 than an arithmetic one — the reason real hardware spends transistors on
 hierarchical-Z and depth compression rather than on more ALUs.
 
-## 7. Shading
+### 7. Shading
 
 Lighting is evaluated per **vertex** (Gouraud), and the rasterizer interpolates
 the results:
@@ -347,7 +344,7 @@ Phong shading would move this line into the per-pixel loop — one `N·L` per
 *fragment* instead of per vertex. Far more accurate on large triangles, and
 several orders of magnitude more expensive.
 
-## 8. Getting pixels out
+### 8. Getting pixels out
 
 ```cpp
 static_assert(sizeof(RGB) == 3, "RGB must be tightly packed");
@@ -385,33 +382,61 @@ threaded:
 
 Roughly 80% of the run is file I/O. Worth knowing before optimising the inner
 loop: at this resolution the renderer is bound by getting bytes out, not by
-computing them. The same shape shows up one level down — every fragment costs a
-depth read, and only survivors cost a depth write plus a colour write, with no
-reuse between them. Streaming, not caching. That traffic is why real hardware
-spends transistors on hierarchical-Z and depth compression rather than on more
-ALUs.
+computing them.
 
-## What CI checks
+---
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push:
+## Build and run
 
-- **Builds with `g++` and `clang++`** under `-Wall -Wextra -Werror`. Two
-  compilers because they disagree about what is worth warning on, and the
-  disagreements are usually the interesting ones. `-Werror` lives in CI rather
-  than the Makefile so a warning stops a merge without stopping someone
-  mid-edit.
-- **Renders all 120 frames and validates them**: the file count, the exact byte
-  size (`1920 × 1080 × 3` plus a 17-byte header = 6,220,817), a `P6` magic
-  number, and that frame 30 contains more than 16 distinct channel values. That
-  last one is the useful check — a broken transform or an empty draw loop still
-  writes 120 perfectly well-formed files, all of them flat grey.
-- **Builds the docs and the graph sources**, and uploads the generated HTML as
-  an artifact. A second workflow, [`pages.yml`](.github/workflows/pages.yml),
-  publishes that HTML to GitHub Pages on pushes to `main`.
+Needs a C++17 compiler and nothing else.
 
-Doxygen warnings are printed and kept but do not fail the job: a doxygen
-version bump can deprecate a tag and produce a warning that says nothing about
-this code. A non-zero exit or a missing `index.html` does fail.
+The Makefile targets **both** Windows and Linux/macOS from one file. Windows
+sets `$(OS)` to `Windows_NT`, and the Makefile branches on it: that branch keeps
+`SHELL := cmd.exe`, `.SHELLFLAGS := /C`, `del`/`if not exist`, and `%%` for
+ffmpeg's frame pattern; the other branch uses the POSIX shell, `rm -f`,
+`mkdir -p` and `%`. Neither branch is a fallback for the other — CI exercises
+the POSIX one on every push, and the Windows one is the original and is
+unchanged.
+
+```bash
+make            # build -> renderer (renderer.exe on Windows)
+make run        # build, clear stale frames, render 120 frames into frames/
+make video      # run, then encode an mp4        (needs ffmpeg)
+make gif        # run, then encode a gif         (needs ffmpeg)
+make docs       # doxygen HTML into docs/html/   (needs doxygen + graphviz)
+make graphs     # redraw the README graphs       (needs graphviz)
+make clean
+```
+
+Without make:
+
+```bash
+g++ -std=c++17 -Wall -Wextra -O2 main.cpp framebuffer.cpp raster.cpp model.cpp -o renderer
+mkdir frames && ./renderer
+```
+
+**Paths resolve from the working directory**, so run from the repository root —
+`main.cpp` loads `Media/Obj_files/torus.obj`. Change that line to swap models;
+`icosphere.obj` and `test.obj` (a cube) are also there.
+
+**`frames/` gets large.** At 1920×1080 one P6 PPM is 6.2 MB and a 120-frame run
+writes 713 MB. It is gitignored, and `make run` clears it first — a leftover
+frame the new run does not overwrite would silently appear in the video and look
+like a rendering bug.
+
+### Docs and CI
+
+The generated Doxygen HTML is published to
+**[hrishikesh-acharyya.github.io/Rasterizer_Simulator](https://hrishikesh-acharyya.github.io/Rasterizer_Simulator/)**
+on every push to `main` that touches a source file. It carries the design notes
+from the headers plus automatically generated include, collaboration and call
+graphs.
+
+[CI](.github/workflows/ci.yml) builds with `g++` and `clang++` under
+`-Wall -Wextra -Werror`, renders all 120 frames, and validates them — file count,
+exact byte size, `P6` magic, and that a frame contains more than 16 distinct
+channel values, since a broken transform still writes perfectly well-formed files
+full of flat grey.
 
 ## Known gaps
 

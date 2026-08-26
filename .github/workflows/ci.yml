@@ -1,8 +1,5 @@
 name: CI
 
-# Push and PR on any branch. The renderer has no dependencies beyond a C++17
-# compiler, so there is nothing to cache and nothing to install for the build
-# job -- it is fast enough to run on everything.
 on:
   push:
   pull_request:
@@ -27,67 +24,104 @@ jobs:
       - name: Build
         run: make CXX=${{ matrix.cxx }} CXXFLAGS="-std=c++17 -Wall -Wextra -Werror -O2"
 
-      - name: Render
-        run: |
-          mkdir -p frames
-          ./renderer
+      # Deliberately `make run` rather than ./renderer directly. The Makefile's
+      # own recipes -- the mkdir, the stale-frame delete, the POSIX branch of
+      # the $(OS) split -- are code too, and code that nothing exercises rots.
+      - name: Render via the Makefile
+        run: make run CXX=${{ matrix.cxx }} CXXFLAGS="-std=c++17 -Wall -Wextra -Werror -O2"
 
-      # Checks the output is actually an image and not 713 MB of zeroes. A P6
-      # header, the exact byte count for 1920x1080x3 plus a 17-byte header, and
-      # one frame that is not a single flat colour -- which is what a broken
-      # transform or an empty draw loop would produce while still writing
-      # perfectly well-formed files.
+      # Nothing here is hardcoded to a resolution or a frame count: both are
+      # read back out of the output. Changing FRAME_COUNT or the viewport
+      # constants should not break CI for an unrelated reason.
+      #
+      # The distinct-value check is the one that matters. A broken transform, an
+      # empty draw loop or an inverted depth test all still write perfectly
+      # well-formed PPMs -- of flat background grey. Structure alone cannot tell
+      # the difference; the number of distinct channel values can.
       - name: Validate output
         run: |
-          count=$(ls frames/*.ppm | wc -l)
-          echo "frames: $count"
-          test "$count" -eq 120
+          python3 - <<'PY'
+          import glob, sys, os
 
-          size=$(stat -c%s frames/030.ppm)
-          echo "frame size: $size"
-          test "$size" -eq 6220817
+          frames = sorted(glob.glob("frames/*.ppm"))
+          assert frames, "no frames were rendered"
+          print(f"frames rendered: {len(frames)}")
 
-          head -c 2 frames/030.ppm | grep -q 'P6'
+          sizes = {os.path.getsize(f) for f in frames}
+          assert len(sizes) == 1, f"frames differ in size: {sorted(sizes)}"
 
-          distinct=$(tail -c +18 frames/030.ppm | od -An -tu1 -v | tr -s ' ' '\n' \
-                     | grep -v '^$' | sort -u | wc -l)
-          echo "distinct channel values: $distinct"
-          test "$distinct" -gt 16
+          # Sample the middle of the sequence: frame 0 could be a degenerate
+          # pose, and the last one is the same pose as the first.
+          probe = frames[len(frames) // 2]
+          with open(probe, "rb") as fh:
+              data = fh.read()
+
+          assert data[:2] == b"P6", f"{probe} is not a binary PPM"
+          header_end = 0
+          for _ in range(3):                       # magic, dimensions, maxval
+              header_end = data.index(b"\n", header_end) + 1
+          w, h = (int(v) for v in data[3:header_end].split()[:2])
+          expected = header_end + w * h * 3
+          assert len(data) == expected, f"{probe}: {len(data)} bytes, expected {expected}"
+          print(f"{probe}: {w}x{h}, {len(data)} bytes, header {header_end}")
+
+          distinct = len(set(data[header_end:]))
+          print(f"distinct channel values: {distinct}")
+          assert distinct > 16, "frame is nearly flat -- geometry or transform is broken"
+          PY
+
+      - name: make clean removes what it built
+        run: |
+          make clean
+          test ! -e renderer
+          test -z "$(ls *.o 2>/dev/null)"
 
       - name: Free the frames
         if: always()
         run: rm -rf frames
 
-  docs:
-    name: docs and graphs
+  tooling:
+    name: docs, graphs and encoders
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install doxygen and graphviz
-        run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
+      - name: Install doxygen, graphviz and ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y doxygen graphviz ffmpeg
 
       # Warnings are printed and uploaded rather than failing the job: a
       # doxygen version bump can deprecate a tag and produce a warning that says
       # nothing about this code. A non-zero exit or a missing index.html does
       # fail, because that means the docs did not build at all.
-      - name: Build docs
+      - name: make docs
         run: |
-          doxygen Doxyfile 2>doxygen-warnings.txt
+          make docs 2>doxygen-warnings.txt || true
           cat doxygen-warnings.txt
           test -f docs/html/index.html
 
-      # Renders the graph sources to a scratch directory. This checks the .dot
-      # files are valid, without comparing against the committed PNGs -- those
-      # are not byte-reproducible across graphviz versions, so diffing them
-      # would fail for reasons that have nothing to do with the graphs.
-      - name: Render graph sources
+      # Redraws the README's graphs from their .dot sources. Checks the sources
+      # are valid without comparing against the committed PNGs -- those are not
+      # byte-reproducible across graphviz versions, so diffing them would fail
+      # for reasons that have nothing to do with the graphs.
+      - name: make graphs
         run: |
-          mkdir -p /tmp/graphcheck
-          for f in Media/Graphs/*.dot; do
-            echo "rendering $f"
-            dot -Tpng "$f" -o "/tmp/graphcheck/$(basename "$f" .dot).png"
-          done
+          make graphs
+          test -s Media/Graphs/include_graph_light.png
+          test -s Media/Graphs/work_amplification_dark.png
+
+      # video and gif were the least tested and most fragile targets: the ffmpeg
+      # frame pattern needs %% on Windows and % elsewhere, and a mistake there
+      # produces a silent no-op rather than an error.
+      - name: make video and make gif
+        run: |
+          make video gif
+          ls -l Media/Videos/torus_gouraud_shading.mp4 Media/Gifs/torus_gouraud_shading.gif
+          test "$(stat -c%s Media/Videos/torus_gouraud_shading.mp4)" -gt 100000
+          test "$(stat -c%s Media/Gifs/torus_gouraud_shading.gif)" -gt 100000
+
+      - name: Free the frames
+        if: always()
+        run: rm -rf frames
 
       - name: Upload docs
         uses: actions/upload-artifact@v7

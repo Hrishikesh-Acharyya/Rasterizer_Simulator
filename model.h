@@ -51,8 +51,6 @@ struct boundingBox{
  * Polygons with more than three vertices are triangulated. Faces are assumed
  * convex; a concave polygon produces triangles outside its own outline.
  *
- * Malformed lines are not diagnosed. A truncated or non-OBJ file may return
- * true with empty or partial output.
  */
 bool loadOBJ(const std::string& path,
              std::vector<Vec4>& out_verts,

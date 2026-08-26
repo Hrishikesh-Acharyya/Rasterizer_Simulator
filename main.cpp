@@ -84,13 +84,14 @@ int main() {
         normal = normalize_Vec3(normal);
     }
 
-    // ---- Model normalisation parameters ------------------------------------
-    //
-    // Indices into normalization_data: 0,1,2 are min x,y,z and 3,4,5 are max.
-    // Centre the model on the origin and scale its largest axis to span 2 units,
-    // so any model lands in a predictable place regardless of its authored
-    // units. Applied via the model matrix, not baked into the vertex data.
-
+   // ---- Model normalisation parameters ------------------------------------
+//
+// Centre the model on the origin and scale its largest axis to span 2 units,
+// so any model lands in a predictable place regardless of its authored units.
+// The 2 is not arbitrary: NDC spans [-1, 1], so a model of extent 2 centred at
+// the origin fills the frame before the camera transform pushes it back.
+//
+// Applied via the model matrix, never baked into the vertex data.
     float centre_x = (box.min.x + box.max.x) / 2.0f;
     float centre_y = (box.min.y + box.max.y) / 2.0f;
     float centre_z = (box.min.z + box.max.z) / 2.0f;

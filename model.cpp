@@ -97,16 +97,18 @@ bool loadOBJ(const std::string& path,
 }
 
 /**
- * Single pass, one comparison per axis per vertex, no allocation inside the
- * loop.
+ * Single pass, one comparison per axis per vertex, no allocation anywhere —
+ * the result is a fixed-size aggregate returned by value, constructed directly
+ * in the caller's storage.
  *
- * min starts at +FLT_MAX and max at FLT_LOWEST — each at the opposite extreme —
- * so the first real vertex always replaces both. Starting from 0 would clamp
- * the box to include the origin whether or not the model does.
+ * min starts at +FLT_MAX and max at FLT_LOWEST, each at the opposite extreme,
+ * so the first real vertex replaces both. Seeding from 0 would clamp the box to
+ * include the origin whether or not the model does.
  *
  * lowest(), not min(): for floating point, min() is the smallest POSITIVE
- * normal value, a tiny number just above zero. Using it here would leave max
- * stuck near zero for any model that sits entirely in negative space.
+ * normal value — a tiny number just above zero, not the most negative float.
+ * Seeding max with it leaves max stuck near zero for any model sitting entirely
+ * in negative space, producing a box that does not contain its own geometry.
  */
 boundingBox normalizationPass(const std::vector<Vec4>& obj_verts)
 {
@@ -124,12 +126,6 @@ boundingBox normalizationPass(const std::vector<Vec4>& obj_verts)
         box.max.y = std::max(box.max.y, obj_verts[i].y);
         box.max.z = std::max(box.max.z, obj_verts[i].z);
     }
-
-    // Order is the interface contract documented in model.h: mins then maxes,
-    // x/y/z within each. The caller reads these by index, so the order here and
-    // the comment there must stay in step — which is the argument for a named
-    // struct instead.
-
 
     return box;
 }

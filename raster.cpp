@@ -176,17 +176,17 @@ void drawTriangle(const screenVertex& A, const screenVertex& B, const screenVert
                     float c2 = w2 * C.rec_w * inv_w_pixel_recip;
 
                     // Gouraud: per-vertex colours interpolated across the face.
-                    // framebuffer[y * VIEWPORT_WIDTH + x] = {
-                    //     std::uint8_t(c0 * A.color.r + c1 * B.color.r + c2 * C.color.r),
-                    //     std::uint8_t(c0 * A.color.g + c1 * B.color.g + c2 * C.color.g),
-                    //     std::uint8_t(c0 * A.color.b + c1 * B.color.b + c2 * C.color.b)
-                    // };
-
                     framebuffer[y * VIEWPORT_WIDTH + x] = {
-                        std::uint8_t(w0 * A.color.r + w1 * B.color.r + w2 * C.color.r),
-                        std::uint8_t(w0 * A.color.g + w1 * B.color.g + w2 * C.color.g),
-                        std::uint8_t(w0 * A.color.b + w1 * B.color.b + w2 * C.color.b)
+                        std::uint8_t(c0 * A.color.r + c1 * B.color.r + c2 * C.color.r),
+                        std::uint8_t(c0 * A.color.g + c1 * B.color.g + c2 * C.color.g),
+                        std::uint8_t(c0 * A.color.b + c1 * B.color.b + c2 * C.color.b)
                     };
+
+                //     framebuffer[y * VIEWPORT_WIDTH + x] = {
+                //         std::uint8_t(w0 * A.color.r + w1 * B.color.r + w2 * C.color.r),
+                //         std::uint8_t(w0 * A.color.g + w1 * B.color.g + w2 * C.color.g),
+                //         std::uint8_t(w0 * A.color.b + w1 * B.color.b + w2 * C.color.b)
+                //     };
                 }
             }
         }

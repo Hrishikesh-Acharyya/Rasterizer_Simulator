@@ -1,0 +1,25 @@
+# materials
+newmtl band0
+Kd 0.870000 0.240000 0.240000
+
+newmtl band1
+Kd 0.900000 0.520000 0.160000
+
+newmtl band2
+Kd 0.880000 0.780000 0.200000
+
+newmtl band3
+Kd 0.360000 0.740000 0.310000
+
+newmtl band4
+Kd 0.160000 0.680000 0.620000
+
+newmtl band5
+Kd 0.200000 0.510000 0.830000
+
+newmtl band6
+Kd 0.440000 0.360000 0.800000
+
+newmtl band7
+Kd 0.780000 0.320000 0.620000
+

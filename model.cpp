@@ -15,10 +15,84 @@
 #include <limits>
 #include <algorithm>
 #include <stdexcept>
+#include <map>
+#include <cstdint>
+
+
+/// Kd is three floats in [0,1]; RGB is three bytes.
+///
+/// +0.5f before the cast ROUNDS. Truncating gives uint8_t(0.72f * 255.0f) ==
+/// 183 where the nearest value is 184 -- a systematic downward bias on every
+/// material in the file, and the same trap as the intensity casts in main.
+static std::uint8_t toByte(float v) {
+    v = std::min(1.0f, std::max(0.0f, v));
+    return static_cast<std::uint8_t>(v * 255.0f + 0.5f);
+}
+
+/// "Media/Obj_files/jack.obj" -> "Media/Obj_files/"
+///
+/// mtllib names a file relative to the OBJ's OWN directory, not the process
+/// working directory. Resolving against the latter works whenever the model
+/// happens to sit in the working directory and fails everywhere else -- the
+/// most common MTL bug. Both separators, since the build targets Windows too.
+
+static std::string directoryOf(const std::string& path) {
+    std::size_t cut = path.find_last_of("/\\");
+    return (cut == std::string::npos) ? std::string() : path.substr(0, cut + 1);
+}
+
+/**
+ * @brief Read a .mtl file into a name -> diffuse colour table.
+ *
+ * Only Kd is read. Ka, Ks, Ns, d, illum and the map_* lines are skipped: the
+ * shading model is Lambertian diffuse with a constant ambient, so there is
+ * nowhere to put them. Unlike vt, these are cheap to add later -- one more
+ * branch here, rather than a change to the vertex layout.
+ *
+ * A missing file is not an error. The caller supplies a default material, so an
+ * empty table simply means every face falls back to it.
+ */
+static std::map<std::string, RGB> loadMTL(const std::string& path)
+{
+    std::map<std::string, RGB> materials;
+
+    std::ifstream file(path);
+    if (!file) {
+        std::printf("Note: no material file at %s, using default colour\n", path.c_str());
+        return materials;
+    }
+
+    std::string line, current;
+    while (std::getline(file, line)) {
+        std::istringstream ss(line);
+        std::string tag;
+        ss >> tag;
+
+        if (tag == "newmtl") {
+            ss >> current;
+            // Insert immediately with a placeholder, so a block carrying no Kd
+            // still produces an entry. Otherwise a usemtl naming it would miss
+            // the table and silently fall back to the default.
+            if (!current.empty())
+                materials[current] = { 204, 204, 204 };
+        }
+        else if (tag == "Kd" && !current.empty()) {
+            float r = 0.0f, g = 0.0f, b = 0.0f;
+            if (ss >> r >> g >> b)
+                materials[current] = { toByte(r), toByte(g), toByte(b) };
+        }
+    }
+
+    std::printf("Loaded %d materials from %s\n",
+                static_cast<int>(materials.size()), path.c_str());
+    return materials;
+}
 
 bool loadOBJ(const std::string& path,
              std::vector<Vec4>& out_verts,
-             std::vector<int>&  out_indices)
+             std::vector<int>&  out_indices,
+             std::vector<int>&  out_tri_materials,
+             std::vector<RGB>&  out_materials)
 {
     std::ifstream file(path);
     if (!file) {
@@ -28,6 +102,16 @@ bool loadOBJ(const std::string& path,
 
     out_verts.clear();
     out_indices.clear();
+    out_tri_materials.clear();
+    out_materials.clear();
+
+    // Material 0 is always a neutral default and is the material in force before
+    // any usemtl appears. A model with no materials therefore needs no special case
+    // downstream: out_materials is never empty and every triangle index is valid.
+    out_materials.push_back({ 204, 204, 204 });
+    int current_material = 0;
+    std::map<std::string, RGB> mtl_table;   // name -> colour, from the sidecar
+    std::map<std::string, int> mtl_index;   // name -> index into out_materials
 
     // OBJ is line-oriented: a leading tag names the record type, the rest of
     // the line is its payload. Parsing each line into its own stringstream
@@ -44,6 +128,36 @@ bool loadOBJ(const std::string& path,
             float x, y, z;
             ss >> x >> y >> z;
             out_verts.push_back({x, y, z, 1.0f});
+        }
+        else if (tag == "mtllib") {
+            std::string name;
+            ss >> name;
+            if (!name.empty())
+                mtl_table = loadMTL(directoryOf(path) + name);
+        }
+
+        else if (tag == "usemtl") {
+            std::string name;
+            ss >> name;
+
+            auto seen = mtl_index.find(name);
+            if (seen != mtl_index.end()) {
+                current_material = seen->second;
+            } else {
+                auto found = mtl_table.find(name);
+                if (found != mtl_table.end()) {
+                    // First use: append to the palette and record where it
+                    // landed. The palette therefore holds only materials
+                    // actually referenced, in first-use order -- a fifty-entry
+                    // MTL used three times yields three entries.
+                    current_material = static_cast<int>(out_materials.size());
+                    out_materials.push_back(found->second);
+                    mtl_index[name] = current_material;
+                } else {
+                    std::printf("Note: usemtl %s not found, using default\n", name.c_str());
+                    current_material = 0;
+                }
+            }
         }
         else if (tag == "f") {
             std::vector<int> face;
@@ -101,6 +215,7 @@ bool loadOBJ(const std::string& path,
 
                 face.push_back(resolved);
             }
+                    // vn, vt, s, g, o and comments are skipped.
 
             // Every failure above clears the face and breaks, discarding the
             // whole polygon rather than the offending vertex. Dropping one
@@ -121,9 +236,10 @@ bool loadOBJ(const std::string& path,
                 out_indices.push_back(face[0]);
                 out_indices.push_back(face[i]);
                 out_indices.push_back(face[i + 1]);
+                out_tri_materials.push_back(current_material);
             }
         }
-        // vn, vt, s, g, o, usemtl, mtllib and comments are all skipped.
+
     }
 
     // size() returns size_t, which is 8 bytes on 64-bit while %d expects 4.
@@ -131,9 +247,10 @@ bool loadOBJ(const std::string& path,
     // a mismatch corrupts every argument after it. Cast narrowly at the call
     // rather than using %zu, so the format string stays portable to toolchains
     // whose runtime predates C99.
-    std::printf("Loaded %d vertices and %d triangles\n",
+     std::printf("Loaded %d vertices, %d triangles, %d materials\n",
                 static_cast<int>(out_verts.size()),
-                static_cast<int>(out_indices.size()) / 3);
+                static_cast<int>(out_indices.size()) / 3,
+                static_cast<int>(out_materials.size()));
     return true;
 }
 

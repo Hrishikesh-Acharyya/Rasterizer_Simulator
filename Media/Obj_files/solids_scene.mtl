@@ -1,0 +1,22 @@
+# materials
+newmtl crimson
+Kd 0.850000 0.220000 0.240000
+
+newmtl azure
+Kd 0.180000 0.450000 0.820000
+
+newmtl amber
+Kd 0.930000 0.680000 0.160000
+
+newmtl jade
+Kd 0.240000 0.680000 0.420000
+
+newmtl violet
+Kd 0.520000 0.340000 0.780000
+
+newmtl coral
+Kd 0.920000 0.450000 0.300000
+
+newmtl teal
+Kd 0.140000 0.620000 0.620000
+

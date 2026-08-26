@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 
 #include "vectors.h"
 #include "matrices.h"
@@ -40,9 +41,20 @@ int main() {
 
     std::vector<Vec4> obj_verts;
     std::vector<int>  obj_indices;
-    if (!loadOBJ("Media/Obj_files/torus.obj", obj_verts, obj_indices)) {
+    std::vector<int>  tri_materials;   // one index per TRIANGLE
+    std::vector<RGB>  materials;       // palette; entry 0 is the default
+
+    if (!loadOBJ("Media/Obj_files/solids_scene.obj",
+                 obj_verts, obj_indices, tri_materials, materials)) {
         return 1;
     }
+
+    // An n-gon fans into n-2 triangles and each one carries its face's
+    // material, so this is the check that the loader pushed the material index
+    // inside the triangulation loop rather than once per face. Getting that
+    // wrong mis-colours everything after the first quad and reads as a
+    // rendering bug rather than a parsing one.
+    assert(tri_materials.size() * 3 == obj_indices.size());
 
     std::vector<screenVertex> screen_verts(obj_verts.size());
     std::vector<Vec3> vertex_normals(obj_verts.size(), {0.0f, 0.0f, 0.0f});
@@ -103,35 +115,6 @@ int main() {
                              box.max.y-box.min.y,
                              box.max.z-box.min.z});
 
-    // ---- Base vertex colours -----------------------------------------------
-    //
-    // PLACEHOLDER. Maps each vertex's position within the bounding box onto RGB
-    // so the geometry is legible without materials. Not a real OBJ concept --
-    // colour comes from a material or a texture. To be replaced by MTL Kd.
-
-    std::vector<RGB> obj_colors(obj_verts.size());
-    {
-        float min_x = box.min.x, max_x = box.max.x;
-        float min_y = box.min.y, max_y = box.max.y;
-        float min_z = box.min.z, max_z = box.max.z;
-
-        float range_x = max_x - min_x;
-        float range_y = max_y - min_y;
-        float range_z = max_z - min_z;
-
-        for (size_t i = 0; i < obj_verts.size(); ++i) {
-            // Fall back to 0.5 when the model is flat on an axis, avoiding a
-            // divide by zero.
-            float fx = (range_x > 1e-8f) ? (obj_verts[i].x - min_x) / range_x : 0.5f;
-            float fy = (range_y > 1e-8f) ? (obj_verts[i].y - min_y) / range_y : 0.5f;
-            float fz = (range_z > 1e-8f) ? (obj_verts[i].z - min_z) / range_z : 0.5f;
-
-            obj_colors[i] = { std::uint8_t(fx * 255.0f),
-                              std::uint8_t(fy * 255.0f),
-                              std::uint8_t(fz * 255.0f) };
-        }
-    }
-
     // ---- Static matrices ---------------------------------------------------
     //
     // Built once outside the loop: nothing about the projection, the camera or
@@ -155,7 +138,7 @@ int main() {
     // View matrix: pushes the world 4 units down -Z, i.e. the camera sits at
     // +4 looking toward the origin. A translation, since the camera neither
     // rotates nor moves.
-    Mat4 view = { {{1,0,0,0},{0,1,0,0},{0,0,1,-4},{0,0,0,1}} };
+    Mat4 view = { {{1,0,0,0},{0,1,0,0},{0,0,1,-2},{0,0,0,1}} };
 
     // Points FROM the surface TOWARD the light, so N.L is directly the cosine
     // falloff with no sign flip.
@@ -213,10 +196,13 @@ int main() {
             // because NDC has +Y up while framebuffer row 0 is the top of the
             // screen. Kept in floats -- rounding to integers here would quantise
             // geometry and cost sub-pixel accuracy.
+            // Colour is deliberately not set here. It is per-TRIANGLE state
+            // now, not per-vertex data, so the triangle loop below fills it.
+            // The four initialisers leave .color value-initialised.
             screen_verts[i] = { (transformed_NDC_and_inv_w.x + 1.0f) * 0.5f * VIEWPORT_WIDTH,
                                 (1.0f - (transformed_NDC_and_inv_w.y + 1.0f) * 0.5f) * VIEWPORT_HEIGHT,
-                                transformed_NDC_and_inv_w.z, transformed_NDC_and_inv_w.w,
-                                obj_colors[i] };
+                                transformed_NDC_and_inv_w.z,
+                                transformed_NDC_and_inv_w.w, {0,0,0}};
         }
 
         // ---- Shading and rasterization -------------------------------------
@@ -237,6 +223,12 @@ int main() {
             const int ib = obj_indices[i + 1];
             const int ic = obj_indices[i + 2];
 
+            // Base colour is per-triangle state selected from the palette, not
+            // per-vertex data: one usemtl block can cover thousands of
+            // triangles. i steps by 3 through obj_indices, so i/3 is the
+            // triangle number.
+            const RGB base = materials[tri_materials[i / 3]];
+
             // Lambertian diffuse with a constant ambient term.
             // max(0, N.L) clamps surfaces facing away from the light to zero
             // rather than letting them go negative; the 0.4 ambient keeps them
@@ -245,21 +237,28 @@ int main() {
             float intensityB = 0.4f + 0.6f * std::max(0.0f, dot_Vec3(world_normals[ib], lightDir));
             float intensityC = 0.4f + 0.6f * std::max(0.0f, dot_Vec3(world_normals[ic], lightDir));
 
-            // Intensity is at most 1.0 here, so the uint8_t casts cannot
-            // overflow. They TRUNCATE rather than clamp, so adding a specular
-            // term or any intensity above 1 would wrap a bright highlight to
-            // black.
-            A.color = { std::uint8_t(A.color.r * intensityA),
-                        std::uint8_t(A.color.g * intensityA),
-                        std::uint8_t(A.color.b * intensityA) };
+            // Base colour times intensity, evaluated per vertex; the rasterizer
+            // interpolates the products. base is identical at all three
+            // vertices and only the intensity differs, so the three colours
+            // share a hue and vary only in brightness.
+            //
+            // Intensity is at most 1.0 here, so these casts cannot overflow.
+            // They TRUNCATE rather than round, biasing every channel down by up
+            // to one level, and a specular term pushing intensity above 1 would
+            // wrap a bright highlight to black.
+            A.color = { std::uint8_t(base.r * intensityA),
+                        std::uint8_t(base.g * intensityA),
+                        std::uint8_t(base.b * intensityA) };
 
-            B.color = { std::uint8_t(B.color.r * intensityB),
-                        std::uint8_t(B.color.g * intensityB),
-                        std::uint8_t(B.color.b * intensityB) };
+            B.color = { std::uint8_t(base.r * intensityB),
+                        std::uint8_t(base.g * intensityB),
+                        std::uint8_t(base.b * intensityB) };
 
-            C.color = { std::uint8_t(C.color.r * intensityC),
-                        std::uint8_t(C.color.g * intensityC),
-                        std::uint8_t(C.color.b * intensityC) };
+            C.color = { std::uint8_t(base.r * intensityC),
+                        std::uint8_t(base.g * intensityC),
+                        std::uint8_t(base.b * intensityC) };
+
+
 
           
             drawTriangle(A, B, C);

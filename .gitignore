@@ -3,6 +3,12 @@
 *.exe
 *.o
 
+# The POSIX build target. $(TARGET) is renderer.exe on Windows, covered by
+# *.exe above, but a plain "renderer" on Linux and macOS -- which nothing here
+# matched, so a build on those platforms left an untracked 40 KB binary sitting
+# in the working tree waiting to be committed by accident.
+renderer
+
 # render output
 *.ppm
 frames/

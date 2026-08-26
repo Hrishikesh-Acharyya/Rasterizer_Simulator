@@ -65,4 +65,3 @@ float x,y,z;
 RGB color;
 };
 
-

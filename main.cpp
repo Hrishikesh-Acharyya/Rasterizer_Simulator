@@ -45,7 +45,7 @@ int main() {
     std::vector<Vec3> vertex_normals(obj_verts.size(), {0.0f, 0.0f, 0.0f});
     std::vector<Vec3> world_normals(obj_verts.size());
 
-    std::vector<float> normalization_data = normalizationPass(obj_verts);
+    boundingBox box = normalizationPass(obj_verts);
 
     // ---- Smooth vertex normals ---------------------------------------------
     //
@@ -91,13 +91,13 @@ int main() {
     // so any model lands in a predictable place regardless of its authored
     // units. Applied via the model matrix, not baked into the vertex data.
 
-    float centre_x = (normalization_data[0] + normalization_data[3]) / 2.0f;
-    float centre_y = (normalization_data[1] + normalization_data[4]) / 2.0f;
-    float centre_z = (normalization_data[2] + normalization_data[5]) / 2.0f;
+    float centre_x = (box.min.x + box.max.x) / 2.0f;
+    float centre_y = (box.min.y + box.max.y) / 2.0f;
+    float centre_z = (box.min.z + box.max.z) / 2.0f;
 
-    float extent = std::max({normalization_data[3] - normalization_data[0],
-                             normalization_data[4] - normalization_data[1],
-                             normalization_data[5] - normalization_data[2]});
+    float extent = std::max({box.max.x-box.min.x,
+                             box.max.y-box.min.y,
+                             box.max.z-box.min.z});
 
     // ---- Base vertex colours -----------------------------------------------
     //
@@ -107,9 +107,9 @@ int main() {
 
     std::vector<RGB> obj_colors(obj_verts.size());
     {
-        float min_x = normalization_data[0], max_x = normalization_data[3];
-        float min_y = normalization_data[1], max_y = normalization_data[4];
-        float min_z = normalization_data[2], max_z = normalization_data[5];
+        float min_x = box.min.x, max_x = box.max.x;
+        float min_y = box.min.y, max_y = box.max.y;
+        float min_z = box.min.z, max_z = box.max.z;
 
         float range_x = max_x - min_x;
         float range_y = max_y - min_y;

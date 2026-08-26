@@ -108,36 +108,28 @@ bool loadOBJ(const std::string& path,
  * normal value, a tiny number just above zero. Using it here would leave max
  * stuck near zero for any model that sits entirely in negative space.
  */
-std::vector<float> normalizationPass(const std::vector<Vec4>& obj_verts)
+boundingBox normalizationPass(const std::vector<Vec4>& obj_verts)
 {
-    std::vector<float> data;
-    float min_x = std::numeric_limits<float>::max();
-    float min_y = std::numeric_limits<float>::max();
-    float min_z = std::numeric_limits<float>::max();
-    float max_x = std::numeric_limits<float>::lowest();
-    float max_y = std::numeric_limits<float>::lowest();
-    float max_z = std::numeric_limits<float>::lowest();
+    boundingBox box;
+    box.min = {std::numeric_limits<float>::max(),std::numeric_limits<float>::max(),std::numeric_limits<float>::max()};
+    box.max = {std::numeric_limits<float>::lowest(),std::numeric_limits<float>::lowest(),std::numeric_limits<float>::lowest()};
 
     for (std::size_t i = 0; i < obj_verts.size(); ++i) {
-        min_x = std::min(min_x, obj_verts[i].x);
-        min_y = std::min(min_y, obj_verts[i].y);
-        min_z = std::min(min_z, obj_verts[i].z);
+        box.min.x = std::min(box.min.x, obj_verts[i].x);
+        box.min.y = std::min(box.min.y, obj_verts[i].y);
+        box.min.z = std::min(box.min.z, obj_verts[i].z);
+;
 
-        max_x = std::max(max_x, obj_verts[i].x);
-        max_y = std::max(max_y, obj_verts[i].y);
-        max_z = std::max(max_z, obj_verts[i].z);
+        box.max.x = std::max(box.max.x, obj_verts[i].x);
+        box.max.y = std::max(box.max.y, obj_verts[i].y);
+        box.max.z = std::max(box.max.z, obj_verts[i].z);
     }
 
     // Order is the interface contract documented in model.h: mins then maxes,
     // x/y/z within each. The caller reads these by index, so the order here and
     // the comment there must stay in step — which is the argument for a named
     // struct instead.
-    data.push_back(min_x);
-    data.push_back(min_y);
-    data.push_back(min_z);
-    data.push_back(max_x);
-    data.push_back(max_y);
-    data.push_back(max_z);
 
-    return data;
+
+    return box;
 }

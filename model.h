@@ -14,6 +14,26 @@
 #include <vector>
 #include <string>
 
+
+/**
+ * @brief Axis-aligned bounding box in the space of the vertices measured.
+ *
+ * Produced by normalizationPass() and consumed by the caller to build the model
+ * normalisation matrix. Model space, float, one per model — unrelated to the
+ * screen-space integer bounds the rasterizer walks per triangle.
+ *
+ * Held as two Vec3 rather than six floats so the pairing is enforced by the
+ * type: min.x and max.x are different names, not indices 0 and 3, and a swap
+ * is a compile error rather than a wrong render. Vec3 arithmetic applies
+ * directly, so the centre is (min + max) * 0.5 and the extent is max - min.
+ */
+
+struct boundingBox{
+
+  Vec3 min;
+  Vec3 max;
+};
+
 /**
  * @brief Load an OBJ file into a vertex array and a flat triangle index list.
  *
@@ -39,20 +59,19 @@ bool loadOBJ(const std::string& path,
              std::vector<int>&  out_indices);
 
 /**
- * @brief Axis-aligned bounding box of a vertex array.
+ * @brief Measure the axis-aligned bounding box of a vertex array.
  *
- * @param obj_verts  Vertices to measure. w is ignored.
- * @return Six floats in the order {min_x, min_y, min_z, max_x, max_y, max_z}.
+ * @param obj_verts  Vertices to measure. The w component is ignored.
+ * @return The componentwise min and max over all vertices.
  *
- * The caller uses these to centre and scale the model, so index order is part
- * of the contract: index 3 is max_x, not min_w.
+ * The caller uses this to centre the model on the origin and scale its largest
+ * axis to span 2 units, matching the NDC range the projection targets. That
+ * normalisation is applied through the model matrix rather than baked into the
+ * vertex data, so the loaded geometry stays exactly as authored.
  *
- * That ordering is the interface's weakness — a fixed-size result returned as a
- * heap-allocated vector, addressed by number, where a wrong index yields a
- * wrong render rather than an error. A small named struct is the right shape
- * and is a planned change.
- *
- * An empty input returns the sentinel values the scan starts from (min = FLT_MAX,
- * max = FLT_LOWEST), which produce a negative extent downstream.
+ * @warning An empty input returns the sentinels the scan starts from
+ *          (min = FLT_MAX, max = -FLT_MAX), an inverted box. The extent comes
+ *          out negative and the model renders inside out rather than failing.
+ *          The caller is responsible for not asking.
  */
-std::vector<float> normalizationPass(const std::vector<Vec4>& obj_verts);
+boundingBox normalizationPass(const std::vector<Vec4>& obj_verts);

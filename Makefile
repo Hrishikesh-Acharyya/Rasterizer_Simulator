@@ -5,8 +5,8 @@ CXXFLAGS := -std=c++17 -Wall -Wextra -O2
 # Output paths. Declared before the platform block below, which reads
 # FRAME_DIR while building its commands.
 FRAME_DIR := frames
-VIDEO     := Media/Videos/torus_gouraud_shading.mp4
-GIF       := Media/Gifs/torus_gouraud_shading.gif
+VIDEO     := Media/Videos/torus_gouraud_shading_perspective_corrected.mp4
+GIF       := Media/Gifs/torus_gouraud_shading_perspective_corrected.gif
 
 # Platform split. Windows itself sets $(OS) to Windows_NT, so this picks the
 # shell and the file-removal commands with no action from the user.

@@ -21,12 +21,20 @@ number.
 
 | | |
 |---|---|
+| <img src="Media/Gifs/ironman.gif" alt="Iron Man model rendered with per-material colour" width="380"><br>**Iron Man** — 129,759 vertices, **217,038 triangles**, 124 `usemtl` blocks. A downloaded model rather than a generated one, which is the point: it is the first mesh in the repo the loader did not produce itself. | <img src="Media/Gifs/human_model.gif" alt="Single-material human figure, smooth shaded" width="380"><br>**Human figure** — 24,459 faces, one material. Shares vertices throughout, so the averaged normals shade it smooth end to end. |
 | <img src="Media/Gifs/solids_scene.gif" alt="Six coloured solids ringing a central torus, hard and soft edges in one render" width="380"><br>**Solids scene** — 3,636 triangles, 7 materials. Flat-faced solids keep their hard edges; the spheres and torus stay smooth. The central torus interpenetrates the ring by ~0.1 units, resolved per pixel by the depth buffer rather than by draw order. | <img src="Media/Gifs/torus_knot.gif" alt="A (2,3) torus knot in eight materials, crossings occluding each other" width="380"><br>**Torus knot** — 12,800 triangles, 8 materials. A (2,3) knot swept by a parallel-transport frame. The crossings occlude each other heavily, which is the depth test doing real work. |
 
 Whether an edge is hard or soft is decided entirely by the mesh, not by a
 renderer flag: the flat-faced solids carry per-face duplicated vertices, so
 normal averaging has nothing to average across; the curved surfaces share
 vertices and average smooth.
+
+The Iron Man model is also the first one to exercise the loader's tolerance
+rather than its parsing. Its OBJ names 124 materials; its MTL defines 11. Six
+`usemtl` names have no match, and each falls back to the neutral default with a
+note on stdout rather than aborting — visible as the white pieces. A loader that
+only ever sees files it generated itself never learns whether it can survive one
+it did not.
 
 ### How it got to that
 
@@ -55,7 +63,7 @@ model.h/cpp       OBJ + MTL loading, index resolution, bounds
 framebuffer.h/cpp colour + depth buffers, clears, PPM output
 raster.h/cpp      edge function, backface cull, drawTriangle
 
-Makefile          build, render, encode video/GIF, docs, graphs
+Makefile          build, render, encode video, docs, graphs
 Doxyfile          Doxygen configuration
 mainpage.dox      landing page for the generated documentation
 LICENSE           MIT
@@ -492,20 +500,26 @@ expensive work is the whole trade.
 
 ## What it costs
 
-**The pipeline runs at ~23 ms per frame** — 3,636 triangles transformed, culled,
-shaded and rasterized into 1920×1080, single threaded, `-O2`.
+**The pipeline runs at ~75 ms per frame** — 217,038 triangles transformed,
+culled, shaded and rasterized into 1920×1080, single threaded, `-O2`.
 
-A full 120-frame run takes ~7.6 s of wall clock, but only ~2.8 s of that is user
-time; the other ~4.8 s is the kernel writing 746 MB of uncompressed PPM to disk.
-No renderer dumps every frame to disk uncompressed — that is this harness, not
-the pipeline, and it should be subtracted before drawing any conclusion about
-where the work goes.
+A full 120-frame run takes ~13.3 s of wall clock, of which ~9.0 s is user time;
+the other ~4.3 s is the kernel writing 746 MB of uncompressed PPM to disk. No
+renderer dumps every frame to disk uncompressed — that is this harness, not the
+pipeline, and it should be subtracted before drawing any conclusion about where
+the work goes.
 
-| | |
-|---|---|
-| user (transform + cull + raster) | ~2.8 s → **~23 ms/frame** |
-| system (PPM writes, harness overhead) | ~4.8 s |
-| wall clock | ~7.6 s |
+| Model | Triangles | user | per frame |
+|---|---|---|---|
+| solids scene | 3,636 | ~2.8 s | ~23 ms |
+| Iron Man | 217,038 | ~9.0 s | **~75 ms** |
+
+Sixty times the geometry for three times the time. The vertex stage scales with
+the model; the fragment stage scales with *coverage*, and both models fill a
+similar fraction of the same 1920×1080 frame. Past a certain triangle count the
+pipeline stops being geometry-bound and the cost sits at the wide end regardless
+— which is the whole reason the wide end is what gets built into fixed-function
+hardware.
 
 ## Build and run
 
@@ -522,7 +536,6 @@ on every push, and the Windows one is the original and is unchanged.
 make            # build -> renderer (renderer.exe on Windows)
 make run        # build, clear stale frames, render 120 frames into frames/
 make video      # run, then encode an mp4        (needs ffmpeg)
-make gif        # run, then encode a gif         (needs ffmpeg)
 make docs       # doxygen HTML into docs/html/   (needs doxygen + graphviz)
 make graphs     # redraw the README graphs       (needs graphviz)
 make clean
@@ -536,10 +549,10 @@ mkdir frames && ./renderer
 ```
 
 **Paths resolve from the working directory**, so run from the repository root —
-`main.cpp` loads `Media/Obj_files/solids_scene.obj`. Change that line to swap
-models; `torus_knot.obj`, `torus.obj`, `icosphere.obj`, `jack.obj` and `test.obj`
-are also there. An MTL referenced by `mtllib` resolves against the OBJ's own
-directory, not the working directory.
+`main.cpp` loads `Media/Obj_files/IronMan.obj`. Change that line to swap models;
+`Human_Model.obj`, `solids_scene.obj`, `torus_knot.obj`, `torus.obj`,
+`icosphere.obj`, `jack.obj` and `test.obj` are also there. An MTL referenced by
+`mtllib` resolves against the OBJ's own directory, not the working directory.
 
 **`frames/` gets large.** At 1920×1080 one P6 PPM is 6,220,817 bytes and a
 120-frame run writes 746,498,040 — 746 MB, or 712 MiB. It is gitignored, and
@@ -562,8 +575,8 @@ graphs.
   rather than hardcoded, and a check that a frame contains more than 16 distinct
   channel values, since a broken transform still writes perfectly well-formed
   files full of flat grey.
-- **tooling** — `make docs`, `graphs`, `video` and `gif`, and a check that the
-  docs landing page has real content rather than just existing.
+- **tooling** — `make docs`, `graphs` and `video`, and a check that the docs
+  landing page has real content rather than just existing.
 - **sanitizers** — ASan and UBSan across a full render. The two hazards this
   design carries by construction are unchecked framebuffer writes behind a
   bounding box that must be clamped, and OBJ indices read from a file and used as
@@ -619,6 +632,8 @@ Deliberately unbuilt, roughly in the order they start to matter:
 | `4ad373c` | Backface culling — and the discovery that `torus.obj` was wound inward on all 800 faces. |
 | `577eb64` | Perspective-correct attribute interpolation, with `rec_w` carried per vertex. |
 | `1c83808` | MTL materials, one index per triangle; torus knot and solids scene added. |
+| `3d6e6aa` | First downloaded models — Iron Man and a human figure — rather than generated ones. |
+| `e3f87e5` | `make gif` retired; the GIF recipe lived only in the Makefile and the gallery is encoded by hand. |
 
 The stills, from the earliest days:
 

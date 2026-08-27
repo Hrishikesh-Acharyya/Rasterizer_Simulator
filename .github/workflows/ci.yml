@@ -123,15 +123,23 @@ jobs:
           test -s Media/Graphs/include_graph_light.png
           test -s Media/Graphs/work_amplification_dark.png
 
-      # video and gif were the least tested and most fragile targets: the ffmpeg
-      # frame pattern needs %% on Windows and % elsewhere, and a mistake there
+      # video was the least tested and most fragile target: the ffmpeg frame
+      # pattern needs %% on Windows and % elsewhere, and a mistake there
       # produces a silent no-op rather than an error.
-      - name: make video and make gif
+      #
+      # $(VIDEO) is read from the Makefile rather than hardcoded here, so
+      # retargeting the render does not silently stop this from checking
+      # anything. The file is restored afterwards: the target writes over a
+      # committed asset, so without this the job leaves the tree dirty.
+      - name: make video
         run: |
-          make video gif
-          ls -l Media/Videos/torus_gouraud_shading.mp4 Media/Gifs/torus_gouraud_shading.gif
-          test "$(stat -c%s Media/Videos/torus_gouraud_shading.mp4)" -gt 100000
-          test "$(stat -c%s Media/Gifs/torus_gouraud_shading.gif)" -gt 100000
+          video=$(make -s -p 2>/dev/null | grep -m1 '^VIDEO :=' | cut -d= -f2- | xargs)
+          echo "target: $video"
+          test -n "$video"
+          make video
+          ls -l "$video"
+          test "$(stat -c%s "$video")" -gt 100000
+          git checkout -- "$video"
 
       - name: Free the frames
         if: always()

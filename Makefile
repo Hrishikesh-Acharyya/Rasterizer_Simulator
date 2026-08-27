@@ -6,7 +6,7 @@ CXXFLAGS := -std=c++17 -Wall -Wextra -O2
 # FRAME_DIR while building its commands.
 FRAME_DIR := frames
 VIDEO     := Media/Videos/IronMan_gouraud_shading_perspective_corrected_mtl_added.mp4
-GIF       := Media/Gifs/IronMan_gouraud_shading_perspective_corrected_mtl_added.gif
+
 
 # Platform split. Windows itself sets $(OS) to Windows_NT, so this picks the
 # shell and the file-removal commands with no action from the user.
@@ -63,8 +63,6 @@ run: $(TARGET)
 video: run
 	ffmpeg -y -framerate 30 -i $(FRAME_DIR)/$(PCT)03d.ppm -c:v libx264 -pix_fmt yuv420p $(VIDEO)
 
-gif: run
-	ffmpeg -y -i $(FRAME_DIR)/$(PCT)03d.ppm -vf "fps=15,scale=640:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" $(GIF)
 
 # Doxygen HTML built from the comments already in the headers. Optional:
 # doxygen is not needed to build or run anything.

@@ -1,6 +1,5 @@
 # Software Rasterizer
 
-[![CI](https://github.com/Hrishikesh-Acharyya/Rasterizer_Simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/Hrishikesh-Acharyya/Rasterizer_Simulator/actions/workflows/ci.yml)
 [![Docs](https://github.com/Hrishikesh-Acharyya/Rasterizer_Simulator/actions/workflows/pages.yml/badge.svg)](https://hrishikesh-acharyya.github.io/Rasterizer_Simulator/)
 
 A 3D triangle rasterizer written from scratch in C++ — no OpenGL, no Vulkan, no
@@ -559,31 +558,32 @@ mkdir frames && ./renderer
 `make run` clears it first: a leftover frame the new run does not overwrite would
 silently appear in the video and look like a rendering bug.
 
-### Docs and CI
+### Docs
 
 The generated Doxygen HTML is published to
 **[hrishikesh-acharyya.github.io/Rasterizer_Simulator](https://hrishikesh-acharyya.github.io/Rasterizer_Simulator/)**
-on every push to `main` that touches a source file. It carries the design notes
-from the headers plus automatically generated include, collaboration and call
-graphs.
+on every push to `main` that touches a source file
+([`pages.yml`](.github/workflows/pages.yml)). It carries the design notes from
+the headers plus automatically generated include, collaboration and call graphs.
 
-[CI](.github/workflows/ci.yml) runs four jobs on every push:
+That is the only automation in the repository. There is no build or test
+workflow: this is a single-author project where a build failure surfaces on the
+next compile.
 
-- **build** — `g++` and `clang++` under `-Wall -Wextra -Werror`, rendering
-  through `make run` so the Makefile's own recipes are exercised, then validating
-  the output: frame count, dimensions and header length read back from the files
-  rather than hardcoded, and a check that a frame contains more than 16 distinct
-  channel values, since a broken transform still writes perfectly well-formed
-  files full of flat grey.
-- **tooling** — `make docs`, `graphs` and `video`, and a check that the docs
-  landing page has real content rather than just existing.
-- **sanitizers** — ASan and UBSan across a full render. The two hazards this
-  design carries by construction are unchecked framebuffer writes behind a
-  bounding box that must be clamped, and OBJ indices read from a file and used as
-  subscripts.
-- **divergence** — renders at `-O0` and `-O2` and measures how far apart the
-  output lands, since undefined behaviour is what changes character across
-  optimisation levels. See below.
+If you want the checks a CI job would have run, they are one command each:
+
+```bash
+make CXXFLAGS="-std=c++17 -Wall -Wextra -Werror -O2"          # warnings are errors
+make CXX=clang++ CXXFLAGS="-std=c++17 -Wall -Wextra -Werror -O2"
+make CXXFLAGS="-std=c++17 -g -O1 -fsanitize=address,undefined" && make run
+```
+
+The sanitizer pass is the one worth running after touching the loader or the
+rasterizer. Two hazards are structural here: framebuffer writes are unchecked
+behind a bounding box that must be clamped, and OBJ indices are read from a file
+and used directly as array subscripts. Both are clean across the full
+217,038-triangle Iron Man model — the first mesh here the loader did not generate
+itself.
 
 ## Known gaps
 
@@ -659,8 +659,24 @@ that keeps each stage instantiable on its own.
 
 The next step is the **fixed-point study**: replacing the float pipeline with a
 fixed-point one behind a flag and measuring how far the output drifts, which is
-what decides the bit widths the hardware needs. The divergence job already shows
-why that measurement has to be a tolerance rather than an equality — two builds of
-the *same* compiler from the *same* source disagree on thousands of pixels by one
-LSB, purely from instruction selection. A fixed-point pipeline will differ by far
-more, and the question is never "identical?" but "how far apart, and where?".
+what decides the bit widths the hardware needs.
+
+That comparison has to be a **tolerance, not an equality**, and it is worth
+knowing why before starting. Building this renderer twice from the same source
+with the same compiler, changing nothing but `-O0` to `-O2` and disabling
+multiply-add contraction on both, does not produce the same image: instruction
+selection differs, the last bit of a float differs, and the truncating `uint8_t`
+cast turns that into a whole integer step. On the solids scene that was ~115,000
+pixels per frame, every one off by exactly 1.
+
+On a mesh with near-coplanar surfaces it is worse than that, and in a more
+interesting way. A one-LSB difference in interpolated depth can flip *which*
+triangle wins the depth test, and if the two carry different materials the pixel
+changes by a hundred levels rather than one. Measured on the Iron Man model:
+~12,800 pixels per frame, max channel difference 131 — but 30% of them isolated
+single pixels and only 9% in contiguous blocks, which is the z-fighting signature
+rather than a systematic error. ASan and UBSan are clean on the same model.
+
+So the RTL comparison cannot ask "identical?". It has to ask "how far apart, and
+where?" — and it has to distinguish a scatter of tie-breaks on coincident
+geometry from a real disagreement, because a pixel metric alone cannot.

@@ -24,7 +24,7 @@ digraph include_graph {
     }
 
     matrices    [label="matrices.h\nMat4, transforms, divide"];
-    model_h     [label="model.h\nOBJ load, bounds"];
+    model_h     [label="model.h\nOBJ + MTL load, bounds"];
     framebuf_h  [label="framebuffer.h\ncolour + depth buffers"];
     raster_h    [label="raster.h\nedge fn, drawTriangle"];
 
@@ -35,6 +35,7 @@ digraph include_graph {
 
     matrices   -> vectors;
     model_h    -> vectors;
+    model_h    -> types;      /* RGB, for the material palette */
     framebuf_h -> types;
     raster_h   -> types;
 

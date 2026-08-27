@@ -96,4 +96,4 @@ clean:
 
 # These are command names, not files to build. Without this, a file named
 # "clean" in the directory would make `make clean` do nothing.
-.PHONY: all run video gif docs graphs clean
+.PHONY: all run video docs graphs clean

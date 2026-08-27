@@ -1,9 +1,9 @@
 name: Docs to Pages
 
-# Publishes the Doxygen HTML to GitHub Pages. Separate from ci.yml on purpose:
-# a deploy needs elevated permissions (pages: write, id-token: write) and a
-# concurrency group, and neither belongs on the build-and-test workflow that
-# runs against every branch and pull request.
+# Publishes the Doxygen HTML to GitHub Pages. This is the only workflow in the
+# repository: a deploy needs elevated permissions (pages: write, id-token:
+# write) and a concurrency group, which is why it was kept separate from the
+# build-and-test workflow while that existed.
 #
 # Requires Settings -> Pages -> Source: "GitHub Actions" to be set once.
 on:

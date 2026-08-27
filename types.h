@@ -53,18 +53,25 @@ static_assert(sizeof(RGB) == 3, "RGB must be tightly packed");
  *
  * x, y are SCREEN coordinates in floats -- deliberately not integers. Only
  * pixel centres sit on the integer grid, which is why sampling happens at
- * (x + 0.5, y + 0.5). Rounding vertices to integers here would quantise
- * geometry and break sub-pixel accuracy.
+ * (x + 0.5, y + 0.5). Rounding vertices here would quantise geometry and cost
+ * sub-pixel accuracy.
  *
- * z is post-divide NDC depth, used for the depth test only. Near maps to -1
- * and far to +1, so the smaller value is the nearer fragment.
+ * z is post-divide NDC depth, used for the depth test only. Near maps to -1 and
+ * far to +1, so the smaller value is the nearer fragment.
  *
  * rec_w is the reciprocal of the clip-space w that produced x, y and z -- the
  * one piece of pre-divide information the rasterizer still needs, since
- * perspective-correct attribute interpolation is a weighted average of 1/w.
- * Stored as the reciprocal, not w, because it is computed once per vertex
- * inside perspectiveTransform and would otherwise be recomputed once per
- * FRAGMENT. Three reciprocals per triangle against one per pixel.
+ * perspective-correct interpolation is a weighted average of 1/w. Stored as the
+ * reciprocal because perspectiveTransform computes it once per vertex and
+ * storing w would mean recomputing it once per FRAGMENT.
+ *
+ * color is the shaded result, not a base colour: material diffuse times this
+ * vertex's Lambertian intensity, multiplied before rasterization. The base is
+ * per-TRIANGLE state from the material palette and only the intensity varies
+ * per vertex, so the three colours across one triangle share a hue and differ
+ * only in brightness. A shader-structured pipeline would carry the intensity
+ * alone and multiply per fragment -- one float across the span instead of
+ * three bytes.
  *
  * This is the vertex format a hardware fetch unit would read: four floats and
  * three bytes, POD, flat, no indirection.

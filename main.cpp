@@ -44,7 +44,7 @@ int main() {
     std::vector<int>  tri_materials;   // one index per TRIANGLE
     std::vector<RGB>  materials;       // palette; entry 0 is the default
 
-    if (!loadOBJ("Media/Obj_files/solids_scene.obj",
+    if (!loadOBJ("Media/Obj_files/IronMan.obj",
                  obj_verts, obj_indices, tri_materials, materials)) {
         return 1;
     }

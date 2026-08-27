@@ -35,18 +35,50 @@ note on stdout rather than aborting — visible as the white pieces. A loader th
 only ever sees files it generated itself never learns whether it can survive one
 it did not.
 
-### How it got to that
+### Flat shading versus Gouraud
 
-| | |
-|---|---|
-| <img src="Media/Gifs/spinning_cube.gif" alt="Spinning cube, vertex colours interpolated across each face" width="300"><br>**Cube** — 12 triangles, colour interpolated across each face. | <img src="Media/Gifs/icosphere_lambertian_lighting.gif" alt="Flat-shaded icosphere showing triangle facets" width="300"><br>**Flat shaded** — one normal per triangle. The facets are real. | <img src="Media/Gifs/icosphere_gouraud_shading.gif" alt="Gouraud-shaded icosphere, facets smoothed away" width="300"><br>**Gouraud shaded** — same 320 triangles, normals averaged per vertex. |
+The same icosphere, the same 320 triangles, the same pose and the same light.
+Only where the lighting is evaluated changed:
 
-The middle and right frames are the argument for per-vertex normals. The mesh is
-identical and the triangle count is identical; what changed is the normals — one
-flat normal per face became an area-weighted average of the faces meeting at each
-vertex — and, following from that, the lighting moved from per-face to per-vertex
-with interpolation across the span. The smoothing comes from the normals, not
-from geometry.
+<img src="Media/png_files/flat_vs_gouraud.png" alt="Flat versus Gouraud shading on the same icosphere, with a magnified detail of each" width="700">
+
+**Flat** evaluates `N·L` once per triangle from that triangle's own face normal,
+and fills the whole triangle with the result. Every face is one constant colour,
+so every shared edge is a step — visible in the detail as the triangle mesh
+itself, drawn in light.
+
+**Gouraud** evaluates `N·L` once per *vertex*, from a normal that is the
+area-weighted average of every face meeting there, and lets the rasterizer
+interpolate between the three results across the span. Adjacent triangles share
+vertices, so they agree on the colour along their shared edge, and the step
+disappears.
+
+Three things worth taking from that:
+
+- **The geometry did not change.** Still 320 flat triangles, still a faceted
+  silhouette — look at the outline in either panel, which stays polygonal. Only
+  the interior shading is smooth. Smooth shading cannot fix a coarse outline; it
+  only stops you seeing the facets *within* the surface.
+- **It is nearly free.** The rasterizer already interpolated colour across
+  triangles for the barycentric fill. Gouraud reuses that machinery unchanged;
+  the only added work is the normal-averaging pass, once at load, and three `N·L`
+  evaluations per triangle instead of one. Nothing per pixel.
+- **The mesh decides, not a flag.** A vertex shared by several faces averages
+  across them and comes out smooth. A vertex duplicated per face has only its own
+  face to average, so it stays hard — which is why the flat-faced solids in the
+  scene above keep crisp edges while the spheres in the same render do not, with
+  no per-object setting anywhere.
+
+Phong shading is the next step along this axis: evaluate `N·L` per *fragment*
+rather than per vertex, which fixes the remaining error on large triangles where
+even the interpolated colour drifts from the true one. That one is not free — it
+is a dot product and a normalise on every covered pixel.
+
+In motion, with the earliest render for scale:
+
+| | | |
+|---|---|---|
+| <img src="Media/Gifs/spinning_cube.gif" alt="Spinning cube, vertex colours interpolated across each face" width="240"><br>**Cube** — 12 triangles, colour interpolated across each face. | <img src="Media/Gifs/icosphere_lambertian_lighting.gif" alt="Flat-shaded icosphere showing triangle facets" width="240"><br>**Flat shaded** — one normal per triangle. | <img src="Media/Gifs/icosphere_gouraud_shading.gif" alt="Gouraud-shaded icosphere, facets smoothed away" width="240"><br>**Gouraud shaded** — normals averaged per vertex. |
 
 Full-resolution versions of everything are in [`Media/Videos/`](Media/Videos),
 including the before/after pairs for perspective correction and materials.

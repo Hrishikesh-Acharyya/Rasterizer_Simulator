@@ -9,26 +9,43 @@
  * readable definition of what a rasterizer does, stage by stage, so that a
  * hardware implementation has something to be diffed against. That intent is
  * why several decisions here look over-careful — the byte-layout assertion on
- * RGB, the POD types with predictable flat layout, and the places where a float
- * will eventually have to become a fixed-point number.
+ * RGB, the POD types with predictable flat layout, the dense material table,
+ * and the places where a float will eventually have to become a fixed-point
+ * number.
  *
  * @section mainpage_pipeline The pipeline
  *
  * One frame, from file to pixels:
  *
- * 1. **Geometry in** — loadOBJ() parses `v` and `f` lines and fan-triangulates
- *    any polygon larger than a triangle. normalizationPass() measures the
- *    bounding box so the model can be centred and scaled to a known size.
+ * 1. **Geometry and materials in** — loadOBJ() parses `v`, `f`, `mtllib` and
+ *    `usemtl`. Face indices are fully resolved at the loader: positive ones
+ *    offset by one, negative ones resolved against the running vertex count,
+ *    zero rejected, the result range-checked. Polygons are fan-triangulated,
+ *    and one material index is emitted per *triangle* — `usemtl` is a state
+ *    write covering every following face, so those boundaries are draw-call
+ *    boundaries. normalizationPass() returns a boundingBox for centring and
+ *    scaling.
  * 2. **Vertex normals** — face normals are accumulated onto shared vertices
  *    *unnormalised*, so each face contributes in proportion to its area
  *    (cross_Vec3()'s magnitude carries that for free), then normalised once.
+ *    A vertex duplicated per face has only one contribution, which is why hard
+ *    and soft edges are a property of the mesh rather than a renderer flag.
  * 3. **Transform** — model, view and projection collapse into one Mat4 via
  *    multiply_matrices(). buildPerspectiveMatrix() copies `-z` into `w` so that
- *    perspectiveTransform() can do the divide the matrix cannot.
- * 4. **Rasterize** — drawTriangle() walks a bounding_box() and evaluates
- *    edge_function() three times per pixel centre. The same three values serve
- *    as the inside test, the depth weights and the colour weights.
- * 5. **Out** — writeFramebufferToPPM() writes the framebuffer as raw bytes,
+ *    perspectiveTransform() can do the divide the matrix cannot. The reciprocal
+ *    is kept as screenVertex::rec_w, the one piece of pre-divide information the
+ *    fragment stage needs.
+ * 4. **Cull** — drawTriangle() rejects a triangle whose signed screen-space
+ *    area has the back-facing sign, before the bounding box and before any
+ *    per-pixel work. One comparison at the narrow end removes an entire
+ *    triangle's worth of work at the wide end.
+ * 5. **Rasterize** — bounding_box() then edge_function() three times per pixel
+ *    centre. The same three values serve as the inside test, the depth weights
+ *    and, after being reweighted by `rec_w`, the perspective-correct colour
+ *    weights. Depth deliberately keeps the *uncorrected* weights: NDC z is
+ *    already a function of 1/z, so screen-space linear interpolation of it is
+ *    exact.
+ * 6. **Out** — writeFramebufferToPPM() writes the framebuffer as raw bytes,
  *    which is why RGB's layout is asserted rather than assumed.
  *
  * @section mainpage_layout Where to start reading
@@ -40,9 +57,9 @@
  * | vectors.h    | Vec3, Vec4 and pure vector arithmetic. Depends on nothing. |
  * | types.h      | RGB and screenVertex. Depends on nothing. |
  * | matrices.h   | Mat4, the transform builders, and the perspective divide. |
- * | model.h      | OBJ loading and bounding-box measurement. |
+ * | model.h      | OBJ and MTL loading, index resolution, bounding box. |
  * | framebuffer.h| Colour and depth buffers, the clears, and PPM output. |
- * | raster.h     | The edge function, bounding box, and drawTriangle(). |
+ * | raster.h     | The edge function, the cull, and drawTriangle(). |
  * | main.cpp     | Scene setup and the per-frame render loop. |
  *
  * raster.h deliberately does **not** include framebuffer.h: a caller needs to
@@ -68,6 +85,6 @@
  * @section mainpage_more Elsewhere
  *
  * The repository README carries the visual walkthrough — rendered animations,
- * the flat-versus-Gouraud comparison, measured per-stage cost, the known gaps,
- * and build instructions. These pages are the API-level companion to it.
+ * the measured cost per stage, the known gaps, and build instructions. These
+ * pages are the API-level companion to it.
  */

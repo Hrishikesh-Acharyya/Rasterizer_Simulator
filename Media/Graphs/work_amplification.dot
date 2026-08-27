@@ -1,35 +1,42 @@
 /*
- * How much work each stage does, per frame, for the default torus at 1920x1080.
+ * How much work each stage does, per frame, for solids_scene at 1920x1080.
  *
  * The ASCII pipeline in the README says what the stages ARE. This says how far
- * apart they are in cost: five orders of magnitude between one vertex and the
+ * apart they are in cost: four orders of magnitude between one vertex and the
  * fragments it helps cover. Node width is drawn in proportion, so the funnel is
  * visible rather than only stated.
  *
- * That spread is the whole architectural argument. Work at the narrow end is
- * worth doing carefully once per vertex; work at the wide end has to be cheap,
- * uniform and parallel, which is exactly the shape of fixed-function hardware.
+ * Note the narrowing at the cull. Backface rejection is the one place the
+ * funnel runs backwards -- a per-triangle sign test that removes roughly half
+ * the geometry before any per-pixel work happens. Cheap work placed upstream of
+ * expensive work is the whole trade.
+ *
+ * That spread is the architectural argument. Work at the narrow end is worth
+ * doing carefully once per vertex; work at the wide end has to be cheap,
+ * uniform and parallel, which is the shape of fixed-function hardware.
  *
  * Rendered to PNG by `make graphs`.
  */
 digraph work_amplification {
     rankdir = TB;
-    ranksep = 0.42;
+    ranksep = 0.40;
     fontname = "Helvetica";
     node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
           fixedsize=true, height=0.62];
     edge [arrowsize=0.75, penwidth=1.3, fontname="Helvetica", fontsize=10];
 
-    frame     [label="1 frame\nclear buffers, build MVP",            width=2.2];
-    vertex    [label="800 vertices\ntransform, divide, viewport map", width=3.2];
-    triangle  [label="1 600 triangles\nshade, bounding box, setup",   width=4.2];
+    frame     [label="1 frame\nclear buffers, build MVP",              width=2.2];
+    vertex    [label="1 968 vertices\ntransform, divide, viewport map", width=3.4];
+    triangle  [label="3 636 triangles\nshade, material lookup",         width=4.4];
+    culled    [label="~half survive\nsigned area rejects back faces",   width=3.0];
     fragment  [label="~10⁶ fragments\n3 edge functions + 1 depth read each", width=6.4];
-    survivor  [label="survivors only\ndepth write + colour write",    width=4.6];
-    output    [label="1 file\n6.2 MB of PPM",                         width=2.2];
+    survivor  [label="survivors only\ndepth write + perspective-correct colour", width=5.0];
+    output    [label="1 file\n6.2 MB of PPM",                           width=2.2];
 
-    frame    -> vertex   [label="  x 800"];
-    vertex   -> triangle [label="  x 2 triangles per vertex"];
-    triangle -> fragment [label="  x bounding box area"];
+    frame    -> vertex   [label="  x 1 968"];
+    vertex   -> triangle [label="  ~1.8 triangles per vertex"];
+    triangle -> culled   [label="  one sign test each"];
+    culled   -> fragment [label="  x bounding box area"];
     fragment -> survivor [label="  depth test rejects the rest"];
     survivor -> output   [label="  once per frame"];
 }

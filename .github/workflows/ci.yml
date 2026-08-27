@@ -216,8 +216,28 @@ jobs:
                   i = data.index(b"\n", i) + 1
               return data[i:]
 
+          # The DELTA is the real gate. A pixel off by one LSB is rounding: two
+          # builds of one compiler select different instruction sequences, the
+          # last bit of a float differs, and the truncating uint8_t cast in the
+          # colour write turns that into a whole integer step. A pixel off by
+          # more than that is not rounding, and that is what this job exists to
+          # catch.
+          #
+          # The FRACTION is a backstop, not a correctness signal. How many
+          # pixels sit within 1 LSB is a property of how many happen to land
+          # near a rounding boundary -- it moves with the scene and with the
+          # arithmetic, not with correctness. Measured: 2 pixels per frame on
+          # the old affine path over a 1600-triangle torus, and ~115,000 (5.5%)
+          # on the current perspective-correct path over the 3,636-triangle
+          # solids scene. Both have max delta 1. The extra reciprocal and three
+          # multiplies per fragment give a last-bit difference many more places
+          # to land, and the scene has far more smooth gradient in it.
+          #
+          # So the fraction limit sits well above that, only wide enough to
+          # catch a wholesale change of image -- which would show up in the
+          # delta anyway.
           MAX_DELTA    = 2        # one LSB of rounding, with a little headroom
-          MAX_FRACTION = 0.0001   # 0.01% of pixels
+          MAX_FRACTION = 0.25     # backstop only; see above
 
           failed = False
           for frame in ("000", "060", "119"):
@@ -240,9 +260,16 @@ jobs:
               print(f"frame {frame}: {differing} of {count} pixels differ "
                     f"({fraction * 100:.5f}%), max channel delta {worst}")
 
-              if worst > MAX_DELTA or fraction > MAX_FRACTION:
-                  print(f"  FAIL: beyond rounding. Suspect undefined behaviour "
-                        f"or an optimisation-sensitive bug.")
+              if worst > MAX_DELTA:
+                  print(f"  FAIL: max delta {worst} exceeds {MAX_DELTA} -- beyond "
+                        f"rounding. Suspect undefined behaviour or an "
+                        f"optimisation-sensitive bug.")
+                  failed = True
+              elif fraction > MAX_FRACTION:
+                  print(f"  FAIL: {fraction * 100:.2f}% of pixels differ, over the "
+                        f"{MAX_FRACTION * 100:.0f}% backstop. Every difference is "
+                        f"within rounding, so this is a change of scene or of "
+                        f"arithmetic rather than a bug -- recheck and re-baseline.")
                   failed = True
 
           sys.exit(1 if failed else 0)

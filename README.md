@@ -66,7 +66,7 @@ Makefile          build, render, encode video, docs, graphs
 Doxyfile          Doxygen configuration
 mainpage.dox      landing page for the generated documentation
 LICENSE           MIT
-.github/          CI and Pages workflows, PR template, dependabot
+.github/          Pages workflow, PR template, dependabot
 .gitattributes    binary file markings and language statistics
 Media/            Obj_files, Videos, Gifs, png_files, Graphs
 ```
@@ -528,8 +528,8 @@ The Makefile targets **both** Windows and Linux/macOS from one file. Windows set
 `$(OS)` to `Windows_NT`, and the Makefile branches on it: that branch keeps
 `SHELL := cmd.exe`, `.SHELLFLAGS := /C`, `del`/`if not exist`, and `%%` for
 ffmpeg's frame pattern; the other branch uses the POSIX shell, `rm -f`, `mkdir -p`
-and `%`. Neither branch is a fallback for the other — CI exercises the POSIX one
-on every push, and the Windows one is the original and is unchanged.
+and `%`. Neither branch is a fallback for the other: the Windows one is the
+original, and the POSIX one is what every command in this README assumes.
 
 ```bash
 make            # build -> renderer (renderer.exe on Windows)

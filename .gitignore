@@ -12,6 +12,9 @@ renderer
 # render output
 *.ppm
 frames/
+frames_s*/
+
 
 # generated documentation
 docs/
+

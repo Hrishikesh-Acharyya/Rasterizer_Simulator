@@ -1,60 +1,93 @@
 # Build configuration
 CXX      := g++
-CXXFLAGS := -std=c++17 -Wall -Wextra -O2
+
+# Source layout. All translation units and headers live in SRC_DIR; TOOL_DIR
+# holds standalone programs with their own main(), which must stay out of
+# SOURCES or the link step gets two of them.
+SRC_DIR  := src
+TOOL_DIR := tools
+
+# -I$(SRC_DIR) is what lets every #include "raster.h" stay exactly as it was
+# after the move. Without it every include would need a relative path.
+CXXFLAGS := -std=c++17 -Wall -Wextra -O2 -I$(SRC_DIR)
 
 # Output paths. Declared before the platform block below, which reads
 # FRAME_DIR while building its commands.
 FRAME_DIR := frames
-VIDEO     := Media/Videos/IronMan_gouraud_shading_perspective_corrected_mtl_added.mp4
-
+VIDEO     := Media/Videos/testing.mp4
 
 # Platform split. Windows itself sets $(OS) to Windows_NT, so this picks the
 # shell and the file-removal commands with no action from the user.
 # The Windows branch is the original one and must keep using cmd.exe: MinGW
 # make would otherwise look for a POSIX shell that may not be installed.
 ifeq ($(OS),Windows_NT)
-    PCT   := %%
-    SHELL := cmd.exe
+    PCT          := %%
+    SHELL        := cmd.exe
     .SHELLFLAGS  := /C
     TARGET       := renderer.exe
+    DIFF_TARGET  := ppmdiff.exe
     RUN_TARGET   := $(TARGET)
+    RUN_DIFF     := $(DIFF_TARGET)
     MKDIR_FRAMES := if not exist $(FRAME_DIR) mkdir $(FRAME_DIR)
     RM_FRAMES    := del /Q $(FRAME_DIR)\*.ppm 2>nul
     RM_OBJECTS   := del /Q *.o 2>nul
     RM_TARGET    := del /Q $(TARGET) 2>nul
+    RM_DIFF      := del /Q $(DIFF_TARGET) 2>nul
 else
     PCT          := %
     TARGET       := renderer
+    DIFF_TARGET  := ppmdiff
     RUN_TARGET   := ./$(TARGET)
+    RUN_DIFF     := ./$(DIFF_TARGET)
     MKDIR_FRAMES := mkdir -p $(FRAME_DIR)
     RM_FRAMES    := rm -f $(FRAME_DIR)/*.ppm
     RM_OBJECTS   := rm -f *.o
     RM_TARGET    := rm -f $(TARGET)
+    RM_DIFF      := rm -f $(DIFF_TARGET)
 endif
 
-# Every .cpp in the project, and the .o each produces
-SOURCES := main.cpp framebuffer.cpp raster.cpp model.cpp
+# Every .cpp in the RENDERER, named without a directory.
+#
+# The directory is supplied by the vpath below instead of being baked into
+# these names, which keeps the .o files in the project root. Writing
+# src/main.cpp here would make OBJECTS become src/main.o, scattering build
+# products through the source tree where RM_OBJECTS would not find them.
+SOURCES := main.cpp framebuffer.cpp raster.cpp raster_fixed.cpp model.cpp stats.cpp
 OBJECTS := $(SOURCES:.cpp=.o)
 
-# Coarse header dependency: any header change rebuilds every object.
-# Imprecise but correct, and fine at this scale.
-HEADERS := vectors.h matrices.h types.h framebuffer.h raster.h model.h
+# Where make looks for prerequisites it cannot find in the current directory.
+vpath %.cpp $(SRC_DIR) $(TOOL_DIR)
 
-# The first target is what plain `make` builds.
-all: $(TARGET)
+# Coarse header dependency: any header change rebuilds every object. Imprecise
+# but correct, and fine at this scale. wildcard rather than a hand-written list
+# so a new header cannot be forgotten -- an omission there would silently give
+# stale objects, which is the failure mode this rule exists to prevent.
+HEADERS := $(wildcard $(SRC_DIR)/*.h)
+
+# The first target is what plain `make` builds. Both programs, because the diff
+# tool is how the renderer's output gets verified, and letting it go stale
+# relative to the renderer is exactly the kind of thing that wastes an hour.
+all: $(TARGET) $(DIFF_TARGET)
 
 # Link step: needs every object file.
 $(TARGET): $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $(TARGET)
 
-# Pattern rule: how to make any .o from its .cpp.
+# ppmdiff is standalone -- it includes nothing from this project, so it depends
+# on its own source and nothing else, and is compiled straight to an executable
+# without an intermediate .o. That also keeps it out of the %.o pattern rule and
+# out of $(OBJECTS).
+$(DIFF_TARGET): $(TOOL_DIR)/ppmdiff.cpp
+	$(CXX) -std=c++17 -Wall -Wextra -O2 $< -o $@
+
+# Pattern rule: how to make any .o from its .cpp, found via vpath.
 # $< is the first prerequisite, $@ is the target.
 %.o: %.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Build, clear stale frames, render.
-# Deleting old frames matters: a leftover frame the new run does not
-# overwrite will appear in the video and look like a rendering bug.
+# Deleting old frames matters: a leftover frame the new run does not overwrite
+# will appear in the video and look like a rendering bug.
 run: $(TARGET)
 	@$(MKDIR_FRAMES)
 	@$(RM_FRAMES)
@@ -62,7 +95,6 @@ run: $(TARGET)
 
 video: run
 	ffmpeg -y -framerate 30 -i $(FRAME_DIR)/$(PCT)03d.ppm -c:v libx264 -pix_fmt yuv420p $(VIDEO)
-
 
 # Doxygen HTML built from the comments already in the headers. Optional:
 # doxygen is not needed to build or run anything.
@@ -93,6 +125,7 @@ graphs:
 clean:
 	@$(RM_OBJECTS)
 	@$(RM_TARGET)
+	@$(RM_DIFF)
 
 # These are command names, not files to build. Without this, a file named
 # "clean" in the directory would make `make clean` do nothing.

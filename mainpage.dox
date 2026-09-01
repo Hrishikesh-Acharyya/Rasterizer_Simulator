@@ -85,10 +85,14 @@
  *   runs along edges are a coverage shift, and a pixel count alone cannot tell
  *   them apart.
  *
- * The measured answer is `W_edge = 19 + 2s` bits, with `s = 4`, giving 27. At
- * `s = 16` the fixed path reproduces the float reference's coverage decision at
- * every pixel of every frame, which is the correctness proof for
- * drawTriangleFixed(). The write-up is `Rasterizer_Study.pdf`.
+ * The measured answer is `W_edge = 19 + 2s` bits, with `s = 4`, giving 27 --
+ * against 22 from the geometric bound and 23 from propagating Q formats, both
+ * correct but loose. At `s = 16`, two of the five swept configurations converge
+ * exactly: zero pixels differing by more than one level, anywhere, in any
+ * frame. That is the correctness proof for drawTriangleFixed() -- given enough
+ * precision it reproduces the golden model exactly, so every difference at
+ * lower `s` is quantisation. The other three floor on coincident geometry
+ * rather than on precision. The write-up is `Rasterizer_Study.pdf`.
  *
  * @section mainpage_layout Where to start reading
  *

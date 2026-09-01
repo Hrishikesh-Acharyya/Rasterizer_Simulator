@@ -86,13 +86,22 @@ including the before/after pairs for perspective correction and materials.
 ## Repository layout
 
 ```
-main.cpp          scene setup and the per-frame render loop
-vectors.h         Vec3/Vec4 and pure vector arithmetic          (no dependencies)
-types.h           RGB and screenVertex                          (no dependencies)
-matrices.h        Mat4, transform builders, perspective divide
-model.h/cpp       OBJ + MTL loading, index resolution, bounds
-framebuffer.h/cpp colour + depth buffers, clears, PPM output
-raster.h/cpp      edge function, backface cull, drawTriangle
+src/                the renderer; headers sit beside their implementations
+  main.cpp          scene setup and the per-frame render loop
+  vectors.h         Vec3/Vec4 and pure vector arithmetic        (no dependencies)
+  types.h           RGB and screenVertex                        (no dependencies)
+  matrices.h        Mat4, transform builders, perspective divide
+  model.h/cpp       OBJ + MTL loading, index resolution, bounds
+  framebuffer.h/cpp colour + depth buffers, clears, PPM output
+  raster.h/cpp      edge function, backface cull, drawTriangle
+  raster_fixed.h/cpp  the fixed-point coverage path
+  stats.h/cpp       exponent histograms behind a compile-time switch
+
+tools/              standalone programs, each with its own main()
+  ppmdiff.cpp       frame-sequence comparison
+
+stats/              exponent histograms and sub-pixel sweep results (CSV)
+Rasterizer_Study.pdf  the bit-width study written from that data
 
 Makefile          build, render, encode video, docs, graphs
 Doxyfile          Doxygen configuration
@@ -102,6 +111,13 @@ LICENSE           MIT
 .gitattributes    binary file markings and language statistics
 Media/            Obj_files, Videos, Gifs, png_files, Graphs
 ```
+
+Headers stay next to their implementations rather than in a separate `include/`.
+That split exists so an install step can copy a public API somewhere; this
+repository builds an executable and has no public API, so it would only mean
+editing every include and navigating two directories to change one module.
+`ppmdiff` is in `tools/` because a second `main()` is a real boundary — it must
+stay out of the renderer's link step — rather than a filename one.
 
 The include graph is kept a DAG on purpose — each `.cpp` can be compiled and
 tested in isolation, which is what a testbench needs. An arrow reads "includes":
@@ -575,12 +591,17 @@ make clean
 Without make:
 
 ```bash
-g++ -std=c++17 -Wall -Wextra -O2 main.cpp framebuffer.cpp raster.cpp model.cpp -o renderer
+g++ -std=c++17 -Wall -Wextra -O2 -Isrc \
+    src/main.cpp src/framebuffer.cpp src/raster.cpp src/raster_fixed.cpp \
+    src/model.cpp src/stats.cpp -o renderer
 mkdir frames && ./renderer
 ```
 
+`-Isrc` is what lets every `#include "raster.h"` stay a bare filename. Leave a
+translation unit out and the link fails; leave `-Isrc` out and the compile does.
+
 **Paths resolve from the working directory**, so run from the repository root —
-`main.cpp` loads `Media/Obj_files/IronMan.obj`. Change that line to swap models;
+`src/main.cpp` loads `Media/Obj_files/IronMan.obj`. Change that line to swap models;
 `Human_Model.obj`, `solids_scene.obj`, `torus_knot.obj`, `torus.obj`,
 `icosphere.obj`, `jack.obj` and `test.obj` are also there. An MTL referenced by
 `mtllib` resolves against the OBJ's own directory, not the working directory.

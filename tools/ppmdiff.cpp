@@ -6,14 +6,15 @@
  *
  *     ppmdiff <dirA> <dirB> <frame_count>
  *
- * Expects <dir>/000.ppm .. <dir>/(N-1).ppm in both directories, same dimensions.
+ * Expects @c dirA/000.ppm .. @c dirA/(N-1).ppm and the same in @c dirB, at
+ * identical dimensions.
  *
  * The comparison this tool exists to support cannot ask "identical?". Rebuilding
- * the renderer with -O0 instead of -O2 already moves ~115,000 pixels per frame
- * on the solids scene, because instruction selection changes the last bit of a
- * float and the truncating uint8_t cast turns that into a whole integer step.
- * A fixed-point rasterizer moves far more. So the question is "how far apart,
- * and where?", and the metrics below are chosen to answer it.
+ * the renderer with -O0 instead of -O2 already moves ~119,000 pixels per frame
+ * on the solids scene at 1080p, because instruction selection changes the last
+ * bit of a float and the truncating uint8_t cast turns that into a whole integer
+ * step. A fixed-point rasterizer moves far more. So the question is "how far
+ * apart, and where?", and the metrics below are chosen to answer it.
  *
  * PER-FRAME METRICS
  *

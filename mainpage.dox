@@ -9,9 +9,14 @@
  * readable definition of what a rasterizer does, stage by stage, so that a
  * hardware implementation has something to be diffed against. That intent is
  * why several decisions here look over-careful — the byte-layout assertion on
- * RGB, the POD types with predictable flat layout, the dense material table,
- * and the places where a float will eventually have to become a fixed-point
- * number.
+ * RGB, the POD types with predictable flat layout, and the dense material
+ * table.
+ *
+ * That question is no longer hypothetical. drawTriangleFixed() is a second
+ * rasterizer whose COVERAGE path is fixed-point, selectable at runtime, sitting
+ * beside the float one rather than replacing it. The float path is the golden
+ * reference; the fixed path is diffed against it pixel for pixel, and the
+ * repository carries the measurements that sized it. See @ref mainpage_fixed.
  *
  * @section mainpage_pipeline The pipeline
  *
@@ -48,6 +53,43 @@
  * 6. **Out** — writeFramebufferToPPM() writes the framebuffer as raw bytes,
  *    which is why RGB's layout is asserted rather than assumed.
  *
+ * Steps 4 and 5 exist twice. With no command-line argument, main() dispatches to
+ * drawTriangle() and the whole pipeline is float. Given a sub-pixel bit count
+ * `s`, the viewport transform additionally snaps each vertex to a `2^-s` grid
+ * into screenVertex::xi and screenVertex::yi, and main() dispatches to
+ * drawTriangleFixed() instead.
+ *
+ * @section mainpage_fixed The fixed-point path
+ *
+ * Only the **coverage** decision is fixed-point: vertex snapping,
+ * edge_function_fixed() and the inside test. Depth interpolation, the depth
+ * test, perspective correction and colour blending are copied verbatim from
+ * drawTriangle() and still run in float.
+ *
+ * That split is the whole point. Any pixel that differs from the golden
+ * reference is unambiguously a coverage decision that flipped, and nothing
+ * else. Depth and colour quantisation are separate questions with separate
+ * answers, and mixing them would make a difference impossible to attribute.
+ *
+ * Two supporting pieces:
+ *
+ * - stats.h instruments nine signals in the float reference with exponent
+ *   histograms. Since a value binned at exponent `e` needs `W = e + 2` bits,
+ *   the histogram *is* the bit-width distribution. Only the float path is
+ *   instrumented — the histograms size hardware from the reference's dynamic
+ *   range, so tallying the fixed path would measure the thing being designed
+ *   rather than the thing being matched.
+ * - `tools/ppmdiff.cpp` compares two directories of frames. It reports an
+ *   isolated-pixel count alongside the raw difference, because scattered single
+ *   pixels are depth tie-breaking on near-coplanar geometry while contiguous
+ *   runs along edges are a coverage shift, and a pixel count alone cannot tell
+ *   them apart.
+ *
+ * The measured answer is `W_edge = 19 + 2s` bits, with `s = 4`, giving 27. At
+ * `s = 16` the fixed path reproduces the float reference's coverage decision at
+ * every pixel of every frame, which is the correctness proof for
+ * drawTriangleFixed(). The write-up is `Rasterizer_Study.pdf`.
+ *
  * @section mainpage_layout Where to start reading
  *
  * The modules are a DAG, and reading them bottom-up is the fastest way in:
@@ -59,14 +101,20 @@
  * | matrices.h   | Mat4, the transform builders, and the perspective divide. |
  * | model.h      | OBJ and MTL loading, index resolution, bounding box. |
  * | framebuffer.h| Colour and depth buffers, the clears, and PPM output. |
- * | raster.h     | The edge function, the cull, and drawTriangle(). |
- * | main.cpp     | Scene setup and the per-frame render loop. |
+ * | raster.h     | The edge function, the cull, and drawTriangle() — the golden reference. |
+ * | raster_fixed.h | drawTriangleFixed() and the fixed-point edge function. |
+ * | stats.h      | Exponent histograms, behind a compile-time switch. Depends on nothing. |
+ * | main.cpp     | Scene setup, the render loop, and the rasterizer selection. |
  *
  * raster.h deliberately does **not** include framebuffer.h: a caller needs to
  * know what a screenVertex is, not that a global framebuffer exists. raster.cpp
- * does include it, because the implementation writes to those globals.
- * Separating interface from binding is what would later let the rasterizer be
- * pointed at a caller-supplied buffer.
+ * and raster_fixed.cpp both do include it, because the implementations write to
+ * those globals. Separating interface from binding is what would later let the
+ * rasterizer be pointed at a caller-supplied buffer.
+ *
+ * raster_fixed.cpp reaches into raster.h for exactly one thing: bounding_box().
+ * Sharing it rather than copying it keeps any measured difference attributable
+ * to coverage rather than to box arithmetic.
  *
  * @section mainpage_reading Reading these pages
  *
@@ -80,7 +128,8 @@
  * - **Collaboration graphs** for each struct.
  *
  * Start from the Files tab, or from drawTriangle() if you want the heart of it
- * first.
+ * first — then drawTriangleFixed() for the same function written the way
+ * hardware would have to.
  *
  * @section mainpage_more Elsewhere
  *

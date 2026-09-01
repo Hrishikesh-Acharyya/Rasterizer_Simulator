@@ -10,8 +10,9 @@
  * beside it in raster_fixed.h rather than behind a flag inside it, precisely so
  * that this code path is provably identical between a golden run and a sweep
  * run -- adding a branch here would change instruction selection around it, and
- * float codegen is sensitive enough that -O0 versus -O2 already moves ~135,000
- * pixels per frame at 1080p.
+ * float codegen is sensitive enough that -O0 versus -O2 already moves ~119,000
+ * pixels per frame on the solids scene at 1080p. See raster.cpp for the
+ * measurement.
  *
  * Deliberately does not include framebuffer.h, though raster.cpp does. A caller
  * needs screenVertex, not the global buffers.

@@ -1,15 +1,26 @@
 /*
- * How much work each stage does, per frame, for IronMan.obj at 1920x1080.
+ * How much work each stage does, PER FRAME, for IronMan.obj at 1920x1080.
  *
  * The ASCII pipeline in the README says what the stages ARE. This says how far
- * apart they are in cost: four orders of magnitude between one vertex and the
- * fragments it helps cover. Node width is drawn in proportion, so the funnel is
- * visible rather than only stated.
+ * apart they are in cost: from one frame to nearly six million bounding-box
+ * pixel tests. Node width widens down the funnel as a visual cue -- it is set
+ * by hand and is NOT a linear scale, since a bar 5.9 million times the width of
+ * another does not fit on a page. The numbers are the claim; the widths only
+ * make the shape visible at a glance.
+ *
+ * Every count here is MEASURED, not estimated. The triangle, vertex,
+ * bounding-box and covered-fragment figures are the SIG_AREA, SIG_SCREEN,
+ * SIG_EDGE and SIG_BARY histogram totals in stats/, divided by their tallies
+ * per event (2 for SIG_SCREEN, 3 for SIG_EDGE and SIG_BARY) and by the 120
+ * frames of the run. Vertex and triangle counts recovered this way match the
+ * loader's own report exactly, which is what makes the other two trustworthy.
  *
  * Note the narrowing at the cull. Backface rejection is the one place the
  * funnel runs backwards -- a per-triangle sign test that removes roughly half
  * the geometry before any per-pixel work happens. Cheap work placed upstream of
- * expensive work is the whole trade.
+ * expensive work is the whole trade. (The cull rate is the one figure here that
+ * is not measured: ilogb discards sign, so the histograms cannot count how many
+ * areas were negative.)
  *
  * That spread is the architectural argument. Work at the narrow end is worth
  * doing carefully once per vertex; work at the wide end has to be cheap,
@@ -25,18 +36,20 @@ digraph work_amplification {
           fixedsize=true, height=0.62];
     edge [arrowsize=0.75, penwidth=1.3, fontname="Helvetica", fontsize=10];
 
-    frame     [label="1 frame\nclear buffers, build MVP",                 width=2.0];
-    vertex    [label="129 759 vertices\ntransform, divide, viewport map", width=3.6];
-    triangle  [label="217 038 triangles\nshade, material lookup",         width=4.6];
-    culled    [label="~half survive\nsigned area rejects back faces",   width=3.0];
-    fragment  [label="~10⁶ fragments\n3 edge functions + 1 depth read each", width=6.4];
-    survivor  [label="survivors only\ndepth write + perspective-correct colour", width=5.0];
-    output    [label="1 file\n6.2 MB of PPM",                           width=2.2];
+    frame     [label="1 frame\nclear buffers, build MVP",                    width=2.0];
+    vertex    [label="129 759 vertices\ntransform, divide, viewport map",    width=3.4];
+    triangle  [label="217 038 triangles\nshade, material lookup",            width=4.2];
+    culled    [label="~half survive\nsigned area rejects back faces",        width=3.0];
+    fragment  [label="5 934 125 bounding-box pixels\n3 edge functions each", width=6.6];
+    covered   [label="734 421 covered\n12.4% of pixels tested",              width=4.8];
+    survivor  [label="depth-test survivors\ndepth write + perspective-correct colour", width=5.4];
+    output    [label="1 file\n6 220 817 bytes of PPM",                       width=2.4];
 
     frame    -> vertex   [label="  x 129 759"];
     vertex   -> triangle [label="  ~1.7 triangles per vertex"];
     triangle -> culled   [label="  one sign test each"];
     culled   -> fragment [label="  x bounding box area"];
-    fragment -> survivor [label="  depth test rejects the rest"];
+    fragment -> covered  [label="  inside test rejects 87.6%"];
+    covered  -> survivor [label="  depth test rejects the rest"];
     survivor -> output   [label="  once per frame"];
 }

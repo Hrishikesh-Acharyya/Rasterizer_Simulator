@@ -7,11 +7,18 @@
  *   -> rasterize every triangle -> write PPM
  *
  * The vertex loop runs once per vertex, the triangle loop once per triangle,
- * and the rasterizer's inner loop once per pixel of coverage. On Iron Man that
- * is 129,759, then 217,038, then roughly 730,000 covered fragments out of 712
- * million bounding-box pixels tested. That widening ratio is the shape of the
- * whole problem: work per stage grows by orders of magnitude downstream, which
- * is why the fixed-function stages sit at the wide end.
+ * and the rasterizer's inner loop once per pixel of every surviving triangle's
+ * bounding box. On Iron Man at 1080p, PER FRAME, that is 129,759 vertices, then
+ * 217,038 triangles, then 5,934,125 bounding-box pixels tested, of which
+ * 734,421 are actually covered -- a 12.4% hit rate. Those last two are measured,
+ * not estimated: they are the SIG_EDGE and SIG_BARY histogram totals divided by
+ * three tallies each and by the 120 frames of the run.
+ *
+ * That widening ratio is the shape of the whole problem: work per stage grows by
+ * orders of magnitude downstream, which is why the fixed-function stages sit at
+ * the wide end. It is also why the tally counters are uint64_t -- three edge
+ * tallies per bounding-box pixel over 120 frames is 2.14 billion on that signal
+ * alone.
  *
  * ## Command line
  *
@@ -22,7 +29,8 @@
  * reasons. The sweep needs many values of s from one binary, and -- more
  * importantly -- drawTriangle must be provably byte-identical between a golden
  * run and a sweep run. A branch inside it would perturb float codegen, and -O0
- * versus -O2 already moves ~135,000 pixels per frame at 1080p.
+ * versus -O2 already moves ~119,000 pixels per frame on the solids scene at
+ * 1080p. See raster.cpp for the measurement.
  */
 
 #include <algorithm>
@@ -54,7 +62,7 @@
 int g_frac_bits = -1;
 
 constexpr float FOV         = 60.0f;   ///< Vertical field of view, DEGREES.
-constexpr int   FRAME_COUNT = 10;      ///< 3 degrees per frame; 120 is one full turn.
+constexpr int   FRAME_COUNT = 120;     ///< 3 degrees per frame, so 120 is one full turn.
 constexpr float NEAR_PLANE  = 0.1f;
 constexpr float FAR_PLANE   = 100.0f;
 

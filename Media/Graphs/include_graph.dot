@@ -1,6 +1,9 @@
 /*
  * Module include graph. An arrow from A to B reads "A includes B".
  *
+ * Every edge here is a real #include of a project header, read off the sources
+ * rather than drawn from memory. System headers are not shown.
+ *
  * Rendered to PNG by `make graphs`; the theme colours are supplied on the dot
  * command line rather than set here, so one source produces both the light and
  * the dark variant the README switches between.
@@ -8,11 +11,16 @@
 digraph include_graph {
     rankdir = BT;
     fontname = "Helvetica";
+    nodesep = 0.28;
+    ranksep = 0.55;
+    splines = true;
     node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=11,
           margin="0.18,0.10"];
     edge [arrowsize=0.7, penwidth=1.1];
 
-    /* Bottom of the graph: these include nothing from the project. */
+    /* Bottom of the graph: these include nothing from the project.
+       stats.h sits here too -- the instrument depends on no pipeline type,
+       which is what lets any stage include it without creating a cycle. */
     subgraph cluster_base {
         label = "no project dependencies";
         labelloc = "t";
@@ -21,37 +29,71 @@ digraph include_graph {
         style = "rounded,dashed";
         vectors [label="vectors.h\nVec3, Vec4, dot, cross"];
         types   [label="types.h\nRGB, screenVertex"];
+        stats_h [label="stats.h\nTALLY, signal enum"];
     }
 
     matrices    [label="matrices.h\nMat4, transforms, divide"];
     model_h     [label="model.h\nOBJ + MTL load, bounds"];
     framebuf_h  [label="framebuffer.h\ncolour + depth buffers"];
-    raster_h    [label="raster.h\nedge fn, drawTriangle"];
+    raster_h    [label="raster.h\nedge fn, drawTriangle\n(golden reference)"];
+    rfixed_h    [label="raster_fixed.h\ndrawTriangleFixed\n(fixed-point coverage)"];
 
-    main        [label="main.cpp\nscene + render loop", shape=box, style="filled"];
+    main        [label="main.cpp\nscene + render loop\n+ rasterizer select", shape=box, style="filled"];
     raster_c    [label="raster.cpp", shape=box, style="filled"];
+    rfixed_c    [label="raster_fixed.cpp", shape=box, style="filled"];
     model_c     [label="model.cpp", shape=box, style="filled"];
     framebuf_c  [label="framebuffer.cpp", shape=box, style="filled"];
+    stats_c     [label="stats.cpp", shape=box, style="filled"];
 
+    /* Pin the two .cpp rows so each implementation sits near its own header
+       instead of being placed wherever the layout finds room. */
+    { rank = same; model_c; framebuf_c; main; raster_c; rfixed_c; stats_c; }
+
+    /* Headers on headers. */
     matrices   -> vectors;
     model_h    -> vectors;
     model_h    -> types;      /* RGB, for the material palette */
     framebuf_h -> types;
     raster_h   -> types;
+    rfixed_h   -> types;      /* the snapped xi/yi live on screenVertex */
 
+    /* main.cpp is the only translation unit that sees the whole pipeline:
+       it owns the scene, so it includes every stage it drives. */
     main -> vectors;
     main -> matrices;
     main -> types;
     main -> framebuf_h;
     main -> raster_h;
+    main -> rfixed_h;
     main -> model_h;
+    main -> stats_h;
 
+    /* Each implementation on its own header. */
     raster_c   -> raster_h;
+    rfixed_c   -> rfixed_h;
     model_c    -> model_h;
     framebuf_c -> framebuf_h;
+    stats_c    -> stats_h;
 
-    /* The one edge that exists only in the implementation: raster.h does not
-       include framebuffer.h, so a caller of drawTriangle does not inherit the
-       global buffers. raster.cpp does, because it writes to them. */
+    /* Edges that exist only in the implementations. raster.h deliberately does
+       not include framebuffer.h, so a caller of drawTriangle does not inherit
+       the global buffers; the .cpp files do, because they write to them. */
     raster_c -> framebuf_h [style=dashed, label="  impl only", fontsize=9];
+    rfixed_c -> framebuf_h [style=dashed, label="  impl only", fontsize=9];
+
+    /* The fixed path reuses the reference's bounding box rather than copying
+       it. Only COVERAGE is reimplemented in fixed point; everything around it
+       is shared or copied verbatim, so any pixel that differs is a coverage
+       decision and nothing else. */
+    rfixed_c -> raster_h [style=dashed, label="  bounding_box", fontsize=9];
+
+    /* Only the float reference is instrumented. The histograms size hardware
+       from the reference's dynamic range, so tallying the fixed path would
+       measure the thing being designed rather than the thing being matched. */
+    raster_c -> stats_h [style=dotted, label="  TALLY", fontsize=9];
+
+    /* tools/ppmdiff.cpp is deliberately absent: it includes no project header
+       at all, so it has no edge on an include graph. Its only contract with
+       the renderer is the PPM files on disk, which is what makes it a separate
+       program rather than another module. */
 }

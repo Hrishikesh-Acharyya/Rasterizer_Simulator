@@ -10,8 +10,19 @@
  * the study. That is also why the fixed-point path is a separate function in a
  * separate translation unit rather than a branch inside drawTriangle: float
  * codegen is sensitive enough that adding a branch would perturb instruction
- * selection around it, and rebuilding this file at -O0 instead of -O2 already
- * moves ~135,000 pixels per frame at 1080p on the solids scene.
+ * selection around it.
+ *
+ * The measurement behind that claim: solids scene, 1920x1080, 10 frames, the
+ * whole renderer built twice with -ffp-contract=off on both and nothing else
+ * changed but -O0 versus -O2 (g++ 13.3). 119,409 pixels per frame differ. All
+ * but FIVE of the 1,194,094 differing pixels across the ten frames differ by
+ * exactly 1 -- the truncating uint8_t cast turning a last-bit float difference
+ * into a whole level. The five outliers reach 89 levels, and those are depth
+ * tie-breaks on near-coplanar geometry flipping which triangle wins.
+ *
+ * That split is the reason ppmdiff reports an isolated-pixel count and not just
+ * a total: two populations with different causes, and a pixel count alone
+ * cannot tell them apart.
  */
 
 #include "raster.h"

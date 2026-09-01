@@ -7,13 +7,21 @@
 PROJECT_NAME           = "Software Rasterizer"
 PROJECT_BRIEF          = "A CPU rasterizer written from scratch, as a reference model for an RTL implementation"
 
-INPUT                  = . 
+# The sources moved into src/ and tools/; mainpage.dox stayed in the root, so
+# all three directories are listed. RECURSIVE stays NO and the directories are
+# named one by one, because recursing from the root would also walk Media/ and
+# stats/ -- megabytes of models, video and CSV for Doxygen to open and reject.
+INPUT                  = . src tools
 # *.dox carries mainpage.dox: documentation with no code attached to it.
 # Without it Doxygen generates an index.html containing a title and
 # nothing else -- a landing page that passes a file-exists check while
 # telling a visitor nothing.
 FILE_PATTERNS          = *.h *.cpp *.dox
 RECURSIVE              = NO
+
+# Without this every documented file is titled "src/raster.h". The paths are an
+# artefact of the layout, not information a reader of the docs needs.
+STRIP_FROM_PATH        = src tools .
 OUTPUT_DIRECTORY       = docs
 
 # The headers carry the design rationale, so document everything, including

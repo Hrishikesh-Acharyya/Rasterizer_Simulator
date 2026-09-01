@@ -9,6 +9,11 @@
 # in the working tree waiting to be committed by accident.
 renderer
 
+# The other POSIX build target, for the same reason: $(DIFF_TARGET) is
+# ppmdiff.exe on Windows and a bare "ppmdiff" everywhere else. `make` builds
+# both programs, so a plain build left this one untracked next to the renderer.
+ppmdiff
+
 # render output
 *.ppm
 frames/

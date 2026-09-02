@@ -15,19 +15,25 @@ throughout — in a byte-layout assertion on the pixel struct, in POD types with
 predictable flat layout, and in a material table shaped the way hardware wants
 one.
 
-That question is no longer hypothetical. A second rasterizer sits beside the
-float one with its coverage path in **fixed point**, selectable at runtime, and
-the repository carries the measurements that sized it: 45 exponent histograms
-over 715 million edge evaluations, a sub-pixel sweep across five configurations,
-and the resulting bit widths. The float path is the golden reference; the fixed
-path is diffed against it pixel for pixel. See
-[The fixed-point study](#the-fixed-point-study).
+**The result: the edge accumulator needs 27 bits — 19 integer plus 2 per
+sub-pixel bit at `s = 4`.** The analytical bounds say 22 or 23 integer bits;
+measuring 4.33 billion edge evaluations says 19. Three bits of a datapath, on
+the widest-running unit in the pipeline, recovered by instrumenting the
+reference instead of trusting the bound.
+
+That is what the second rasterizer is for. It sits beside the float one with its
+coverage path in **fixed point**, selectable at runtime; the float path is the
+golden reference and the fixed path is diffed against it pixel for pixel. The
+measurements are committed alongside — 45 exponent histograms and a sub-pixel
+sweep across five configurations. Everything below is the evidence:
+[the study](#the-fixed-point-study), or
+[`Rasterizer_Study.pdf`](Rasterizer_Study.pdf) in full.
 
 ## Gallery
 
 | | |
 |---|---|
-| <img src="Media/Gifs/ironman.gif" alt="Iron Man model rendered with per-material colour" width="380"><br>**Iron Man** — 129,759 vertices, **217,038 triangles**, 124 `usemtl` blocks. A downloaded model rather than a generated one, which is the point: it is the first mesh in the repo the loader did not produce itself. | <img src="Media/Gifs/human_model.gif" alt="Single-material human figure, smooth shaded" width="380"><br>**Human figure** — 24,459 faces, one material. Shares vertices throughout, so the averaged normals shade it smooth end to end. |
+| <img src="Media/Gifs/ironman.gif" alt="Iron Man model rendered with per-material colour" width="380"><br>**Iron Man** — 129,759 vertices, **217,038 triangles**, 124 `usemtl` blocks naming 9 distinct materials. A downloaded model rather than a generated one, which is the point: it is the first mesh in the repo the loader did not produce itself. | <img src="Media/Gifs/human_model.gif" alt="Single-material human figure, smooth shaded" width="380"><br>**Human figure** — 24,459 faces, one material. Shares vertices throughout, so the averaged normals shade it smooth end to end. |
 | <img src="Media/Gifs/solids_scene.gif" alt="Six coloured solids ringing a central torus, hard and soft edges in one render" width="380"><br>**Solids scene** — 3,636 triangles, 7 materials. Flat-faced solids keep their hard edges; the spheres and torus stay smooth. The central torus interpenetrates the ring by ~0.1 units, resolved per pixel by the depth buffer rather than by draw order. | <img src="Media/Gifs/torus_knot.gif" alt="A (2,3) torus knot in eight materials, crossings occluding each other" width="380"><br>**Torus knot** — 12,800 triangles, 8 materials. A (2,3) knot swept by a parallel-transport frame. The crossings occlude each other heavily, which is the depth test doing real work. |
 
 Whether an edge is hard or soft is decided entirely by the mesh, not by a
@@ -432,8 +438,10 @@ reversed. The projection has already done the work; this only reads the result.
 two candidate reversals — the viewport Y flip and the sign of `w` — and reasoning
 through them gave the wrong answer. The cube at zero rotation settles it: its
 single visible face is the only negative pair, and the magnitudes check out, with
-the front face projecting `(5/3)² = 2.778` times the area of the back one at
-camera distance 4 against a measured 2.778.
+the front face projecting `(5/3)² = 2.778` times the area of the back one at the
+camera distance of 4 in use at the time, against a measured 2.778. (The camera
+sits at +2 today; that check was taken on the cube before the distance changed,
+and the ratio is a property of the two depths, not of the current scene.)
 
 Using `>=` rather than `>` also drops degenerate zero-area triangles, which would
 otherwise divide by zero when normalising the barycentric weights.
@@ -643,103 +651,41 @@ hardware.
 ## The fixed-point study
 
 The renderer exists to be a golden reference for hardware, and hardware needs
-numbers: how many bits does each datapath actually need? This part of the
-repository answers that, and the raw measurements are committed alongside the
-conclusions so the reasoning can be checked rather than taken on faith.
+numbers: how many bits does each datapath need? The full write-up is
+[`Rasterizer_Study.pdf`](Rasterizer_Study.pdf) — 19 pages, with the per-run notes
+and every CSV under [`stats/`](stats). The short version:
 
-It runs in two phases, and they answer different questions.
+**How wide? — exponent histograms.** `stats.h` records `std::ilogb(v)` for nine
+signals in the float reference. A value binned at exponent `e` needs
+`W = e + 2` bits, so the histogram *is* the bit-width distribution. Reading the
+cumulative sum from the top turns one worst case into a design space — solids
+scene, 715,426,158 edge evaluations:
 
-### Phase 1 — how wide? Exponent histograms
-
-`stats.h` instruments nine signals in the float reference. For every value it
-records `std::ilogb(v)`, the integer `e` with `2^e <= |v| < 2^(e+1)` — the index
-of the most significant set bit. A value binned at `e` needs
-
-```
-W = e + 2 bits        (e + 1 magnitude bits, plus a sign)
-```
-
-so the histogram **is** the bit-width distribution, already computed. `ilogb`
-reads the float's exponent field directly; it is not a logarithm and costs one
-instruction.
-
-Reading the cumulative sum from the top turns a single worst case into a design
-space. On the solids scene at 1080p, over 715,426,158 edge evaluations:
-
-| accumulator width | evaluations that overflow it | share |
+| accumulator width | evaluations it overflows | share |
 |---|---|---|
-| 19 bits | 0 | 0.00% |
+| **19 bits** | **0** | **0.00%** |
 | 18 bits | 7,182,200 | 1.00% |
 | 17 bits | 41,644,534 | 5.82% |
-| 16 bits | 101,388,874 | 14.17% |
 
-**19 bits covers everything.** That is the measured answer, against 22 from the
-geometric bound and 23 from propagating Q formats naively — the analytical
-bounds are correct but loose, because they assume a worst case the geometry
-never actually reaches.
+**How many sub-pixel bits? — the sweep.** `drawTriangleFixed` snaps vertices to a
+`2^-s` grid; sweeping `s` and diffing against the float reference gives the
+error curve. The metric matters more than the count: `diff = 1` is
+arithmetic-path noise from the truncating `uint8_t` cast and barely moves,
+`diff ≥ 2` is a coverage decision that flipped. Reading the raw total says fixed
+point improves 14% and hardly converges; reading the coverage column says it
+converges. Each extra bit halves it — 25 measured ratios across five
+configurations (three meshes, three resolutions) all bracket 2.0.
 
-The instrument is off in normal builds. `HISTOGRAM_STATS` in `stats.h` is a
-`#define` rather than a `-D` flag on purpose: a `-D` changes no file's
-modification time, so `make` would hand back a stale object. When off, `TALLY`
-expands to an unevaluated `sizeof` — no code is emitted, but the operands are
-still *named*, so a variable that exists only to be tallied does not trip
-`-Wunused-variable`, and a typo at a call site still fails to compile.
+(`s = 0` is off that curve everywhere, 3.5× to 18.4×, by construction: with no
+fractional bits there is no 0.5, so the sample lands on the pixel *corner* — a
+half-pixel shift on top of the snapping error.)
 
-Only the float path is instrumented. The histograms size hardware from the
-reference's dynamic range, so tallying the fixed path would measure the thing
-being designed instead of the thing being matched.
-
-The CSVs are in [`stats/`](stats): nine signals across five configurations —
-three meshes at 1080p, plus the solids scene at 720p and 480p, 120 frames each.
-Every total was checked against a predicted value before any conclusion was
-drawn: triangle area against triangles × frames, screen coordinates against
-vertices × frames × 2, barycentrics against 3 × covered fragments. They match
-exactly, which is what makes the derived per-stage numbers in the work graph
-above trustworthy.
-
-### Phase 2 — how many sub-pixel bits? The sweep
-
-`drawTriangleFixed` snaps vertices to a `2^-s` grid and does coverage in
-integers. Sweeping `s` and diffing each run against the float reference with
-`ppmdiff` gives the error-versus-precision curve.
-
-The metric matters more than the raw count. The difference histogram is two
-populations, and reading the total conflates them:
-
-- **diff = 1 is arithmetic-path noise.** The fixed path reaches the barycentric
-  weights by a different route, and the truncating `uint8_t` cast turns a
-  last-bit difference into a whole level. This floor barely moves across the
-  sweep. The *same* population appears if you merely rebuild the reference at
-  `-O0` instead of `-O2`.
-- **diff ≥ 2 is coverage.** A pixel that switched between model and background,
-  or between two materials. This is the signal.
-
-Solids scene, 1080p, 10 frames:
-
-| s | total differing | diff = 1 | **diff ≥ 2** | per frame | max channel |
-|---|---|---|---|---|---|
-| 0 | 1,604,919 | 1,547,525 | 57,394 | 5,739.4 | 221 |
-| 1 | 1,434,291 | 1,425,780 | 8,511 | 851.1 | 222 |
-| 2 | 1,412,442 | 1,408,184 | 4,258 | 425.8 | 220 |
-| 4 | 1,393,886 | 1,393,001 | 885 | 88.5 | 218 |
-| 8 | 1,388,534 | 1,388,474 | 60 | 6.0 | 164 |
-| 16 | 1,386,515 | 1,386,515 | **0** | **0.0** | **1** |
-
-Read the raw total and you get 1,604,919 → 1,386,515, a 14% improvement, and the
-impression that fixed point barely converges. Read the coverage column and it
-goes to **zero**.
-
-**At s = 16 the fixed path makes the identical coverage decision to the float
-reference at every pixel of every frame.** That is the correctness proof for
-`drawTriangleFixed`: given enough precision it reproduces the golden model
-exactly, so every difference at lower `s` is quantisation and nothing else.
-
-Each extra bit halves the coverage error, as `2^-s` predicts. Twenty measured
-ratios across four configurations — two meshes, three resolutions — all bracket
-2.0. `s = 0` is the one outlier at 6.74, and by construction: with zero
-fractional bits there is no representation of 0.5, so the sample point falls on
-the pixel *corner* rather than its centre. That is a systematic half-pixel shift
-on top of the snapping error — two error sources where every other `s` has one.
+At `s = 16`, **two of the five configurations converge exactly** — zero pixels
+differing by more than one level, anywhere, in any frame. That is the
+correctness proof for `drawTriangleFixed`: given enough precision it reproduces
+the golden model exactly, so every difference at lower `s` is quantisation. The
+other three floor on coincident geometry rather than precision (torus knot 1
+pixel, solids 480p 2, Iron Man 18).
 
 ### The answer
 
@@ -747,35 +693,29 @@ on top of the snapping error — two error sources where every other `s` has one
 s = 4  ->  W_edge = 19 + 2s = 27 bits
 ```
 
-19 integer bits from phase 1, plus 2 bits per sub-pixel bit because the edge
-function multiplies two coordinates and widths add on a multiply. 27 bits fits
-`int32_t` with five to spare. Depth needs zero integer bits and 16 fractional.
-
-At `s = 4` that leaves 88.5 pixels per frame differing by 2 or more at 1080p —
-0.004% of the screen — in contiguous runs along silhouette edges. `s = 8` costs
-eight more bits and forces a 64-bit datapath to buy a 15× reduction in an
-already negligible count.
+Nineteen integer bits *measured*, against 22 from the geometric bound and 23
+from Q propagation — both correct, both loose, because they assume a worst case
+the geometry never reaches. 27 fits `int32_t` with five to spare; depth needs
+zero integer bits and 16 fractional. At `s = 4`, 88.5 pixels per frame differ by
+2 or more at 1080p — 0.004% of the screen, in runs along silhouettes.
 
 Two findings the analysis could not have given:
 
 - **Required width is uncorrelated with triangle count.** One mesh has 17× the
   triangles of another and needs two more bits, because width tracks the
-  *largest* triangle rather than the mean.
-- **The diff = 1 noise floor scales inversely with tessellation density, then
-  saturates** — and, proportionally, it is *worse* at lower resolution (9.79% of
-  the screen at 480p against 6.69% at 1080p). A lower-resolution hardware target
-  has a larger proportional noise floor to budget for, which is the
-  counterintuitive direction.
+  *largest* triangle, not the mean.
+- **The `diff = 1` noise floor falls as tessellation rises, then saturates** —
+  and proportionally it is *worse* at lower resolution (9.79% of the screen at
+  480p against 6.69% at 1080p). A lower-resolution hardware target has a larger
+  proportional noise floor to budget for, which is the counterintuitive
+  direction.
 
-**One caveat, stated because the metric cannot see it.** A frame-versus-
-reference diff cannot detect *temporal* error. Direct3D mandates `s = 8` because
-at low `s` an edge snaps between quantised positions as geometry rotates, which
-reads as crawling along silhouettes. Measuring that means diffing consecutive
-frames of the same run at different `s` — a different experiment, not yet done.
-So `s = 4` is the answer to the question that was asked, not to every question.
-
-The write-up is [`Rasterizer_Study.pdf`](Rasterizer_Study.pdf); the per-run notes
-and CSVs are under [`stats/`](stats).
+**The metric cannot see temporal error.** A frame-versus-reference diff cannot
+detect edge crawl — an edge snapping between quantised positions as geometry
+rotates. Direct3D mandates `s = 8` for that reason where this static metric is
+content with 4. Measuring it means diffing consecutive frames of the same run,
+which is a different experiment and has not been done. `s = 4` answers the
+question that was asked, not every question.
 
 ## Build and run
 
@@ -942,26 +882,14 @@ Deliberately unbuilt, roughly in the order they start to matter:
 
 | Commit | Milestone |
 |---|---|
-| `5f00633` | Framebuffer as a flat `vector<RGB>`, with the `static_assert` that makes the raw `fwrite` safe. |
-| `621e4f8` | Colour map written to a PPM file — proof the bytes land where they should. |
-| `83bbe08` | Edge function, inside test, and a viewport-clamped bounding box. |
-| `ec5aad4` | Edge function values reused as barycentric weights → smooth colour. |
-| `52bd7c1` | Z-buffer and depth test: overlap resolves per pixel, not by draw order. |
-| `f8b16a8` | Perspective matrix and the divide by `w`. Flat images become 3D. |
-| `2629503` | Rotation matrices about X, Y, Z composed into a model matrix. |
-| `9c34965` | 120-frame animation loop with per-frame buffer clears. |
-| `1429249` | OBJ loader, fan triangulation, and the bounding-box normalisation pass. |
-| `6c25434` | Face normals and a Lambertian diffuse term. |
-| `282c3e3` | Gouraud shading: area-weighted per-vertex normals. |
+| `5f00633`–`282c3e3` | From a flat `vector<RGB>` to a shaded animation: PPM output, the edge function and inside test, barycentric colour, the z-buffer, the perspective divide, rotation matrices, the OBJ loader with fan triangulation, and Gouraud-shaded Lambertian lighting. |
 | `95ac44b`–`ef5f2ef` | Split from one 488-line `main.cpp` into six documented modules. |
-| `b01b116` | Makefile: incremental build, render, video and GIF targets. |
-| `8800747` | `normalizationPass` returns a named `boundingBox` instead of six floats by index. |
+| `b01b116`–`8800747` | Makefile with incremental build and video targets; `normalizationPass` returns a named `boundingBox` rather than six floats by index. |
 | `0c78fcb` | Negative and out-of-range OBJ indices resolved and validated at the loader. |
 | `4ad373c` | Backface culling — and the discovery that `torus.obj` was wound inward on all 800 faces. |
 | `577eb64` | Perspective-correct attribute interpolation, with `rec_w` carried per vertex. |
 | `1c83808` | MTL materials, one index per triangle; torus knot and solids scene added. |
 | `3d6e6aa` | First downloaded models — Iron Man and a human figure — rather than generated ones. |
-| `e3f87e5` | `make gif` retired; the GIF recipe lived only in the Makefile and the gallery is encoded by hand. |
 | `7f84287` | `ppmdiff`: frame-sequence comparison with an isolated-pixel count, written *before* the fixed-point path so the metric could not be tuned to flatter it. |
 | `437ecbe` | `stats.h`/`stats.cpp`: exponent histograms behind a compile-time switch. |
 | `519fac5` | The float rasterizer instrumented — nine signals, no change to its arithmetic. |

@@ -81,17 +81,18 @@ void clear_zBuffer() {
  * padding amount and the image would come out as diagonal streaks.
  *
  */
-void writeFramebufferToPPM(const std::string& filename) {
+bool writeFramebufferToPPM(const std::string& filename) {
     FILE* f = std::fopen(filename.c_str(), "wb");   // "wb": binary mode matters
                                                     // on Windows, where text
                                                     // mode rewrites 0x0A bytes
                                                     // and corrupts pixel data
     if (f == nullptr) {
         std::printf("Error: could not open %s for writing\n", filename.c_str());
-        return;
+        return false;
     }
 
     std::fprintf(f, "P6\n%d %d\n255\n", VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
     std::fwrite(framebuffer.data(), sizeof(RGB), no_of_pixels, f);
     std::fclose(f);
+    return true;
 }

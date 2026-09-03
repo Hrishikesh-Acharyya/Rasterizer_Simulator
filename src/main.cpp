@@ -39,6 +39,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <vector>
 
 #include "vectors.h"
@@ -101,6 +102,26 @@ int main(int argc, char** argv)
             return 1;
         }
         std::snprintf(frame_dir, sizeof(frame_dir), "frames_s%d", g_frac_bits);
+    }
+
+    // Created here rather than left to `make run`, which only ever makes
+    // "frames/". Every frames_s<N>/ a sweep needs was previously the caller's
+    // job to mkdir by hand; skip it and every write below fails open() and the
+    // run "succeeds" having written nothing. create_directories is also the
+    // no-op case when the directory already exists, so this is safe to run
+    // unconditionally on every invocation.
+    //
+    // Non-throwing overload deliberately: the default one throws
+    // filesystem_error, and an uncaught exception here would trade a silent
+    // failure for an unhandled-exception crash -- worse, not better. A path
+    // that exists as a plain file (not a directory) is the case that
+    // provokes it; report that plainly and exit instead.
+    std::error_code ec;
+    std::filesystem::create_directories(frame_dir, ec);
+    if (ec) {
+        std::fprintf(stderr, "Error: could not create %s/ (%s)\n",
+                     frame_dir, ec.message().c_str());
+        return 1;
     }
 
     // Echo the full configuration. Model, resolution and frame count are all
@@ -390,7 +411,17 @@ int main(int argc, char** argv)
         // ffmpeg's sequence globbing and ppmdiff's frame numbering expect.
         char filename[256];
         std::snprintf(filename, sizeof(filename), "%s/%03d.ppm", frame_dir, frame);
-        writeFramebufferToPPM(filename);
+
+        // Fatal rather than logged-and-continued: a run that cannot write its
+        // frames must not return 0. create_directories above prevents the
+        // common cause, but a write can still fail on a full disk or a
+        // permissions problem, and this is the difference between that
+        // surfacing immediately and a sweep silently comparing against
+        // whatever frames happen to already be on disk.
+        if (!writeFramebufferToPPM(filename)) {
+            std::fprintf(stderr, "Aborting: frame %d could not be written.\n", frame);
+            return 1;
+        }
     }
 
     STATS_DUMP(STATS_PREFIX);

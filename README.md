@@ -8,25 +8,32 @@ graphics library of any kind. The only drawing primitive in the whole program is
 projection, backface culling, the depth test, perspective-correct barycentric
 interpolation, Gouraud-shaded lighting, OBJ and MTL loading — is built by hand.
 
-It is not trying to be fast. It is a **reference model**: an executable,
-readable definition of what a rasterizer does, stage by stage, so that a
-hardware implementation has something to be diffed against. That intent shows up
-throughout — in a byte-layout assertion on the pixel struct, in POD types with
-predictable flat layout, and in a material table shaped the way hardware wants
-one.
+## Why this exists
 
-**The result: the edge accumulator needs 27 bits — 19 integer plus 2 per
-sub-pixel bit at `s = 4`.** The analytical bounds say 22 or 23 integer bits;
-measuring 4.33 billion edge evaluations says 19. Three bits of a datapath, on
-the widest-running unit in the pipeline, recovered by instrumenting the
-reference instead of trusting the bound.
+I am working toward a custom GPU in hardware, and I wanted to understand the
+graphics pipeline properly before writing any RTL — not the textbook block
+diagram, but what each stage actually computes, what state it carries between
+stages, and where the work really goes. Building every stage by hand is how I
+went about getting that understanding: rasterization, the depth test,
+perspective-correct interpolation, shading, and the transform chain feeding
+them. Nothing here is trying to be fast. Each stage is written to be understood,
+which is why the headers carry more reasoning than code.
 
-That is what the second rasterizer is for. It sits beside the float one with its
-coverage path in **fixed point**, selectable at runtime; the float path is the
-golden reference and the fixed path is diffed against it pixel for pixel. The
-measurements are committed alongside — 45 exponent histograms and a sub-pixel
-sweep across five configurations. Everything below is the evidence:
-[the study](#the-fixed-point-study), or
+The second purpose follows from the first. Once the RTL exists, this becomes its
+**golden reference**: same geometry in, framebuffer diffed pixel for pixel, so a
+disagreement is a bug in the hardware rather than an open question. That target
+is why a few decisions look over-careful — a byte-layout assertion on the pixel
+struct, POD types with flat predictable layout, a material table shaped the way
+hardware wants one, and a module split that keeps each stage instantiable on its
+own.
+
+A fixed-point study came later, after the pipeline was working: a second
+rasterizer whose coverage path runs in fixed point, diffed against the float one
+to measure how many bits each datapath actually needs. It answers a real
+question — 27 bits for the edge accumulator — and the measurements behind it are
+committed. But it is a branch off the main line rather than the point of the
+repository, and it is the last thing to read if you are here for how a
+rasterizer works: [the study](#the-fixed-point-study), or
 [`Rasterizer_Study.pdf`](Rasterizer_Study.pdf) in full.
 
 ## Gallery
@@ -242,9 +249,12 @@ reason the wide end is what gets built into fixed-function hardware.
 
 ## The fixed-point study
 
-Hardware needs numbers: how many bits does each datapath need? The full
-write-up is [`Rasterizer_Study.pdf`](Rasterizer_Study.pdf), with the per-run
-notes and every CSV under [`stats/`](stats). The short version:
+A later addition, once the pipeline above was working and correct. Hardware
+eventually needs numbers — how many bits does each datapath need? — so the
+question was worth answering, but it is a side branch rather than what the
+repository is for. The full write-up is
+[`Rasterizer_Study.pdf`](Rasterizer_Study.pdf), with the per-run notes and every
+CSV under [`stats/`](stats). The short version:
 
 **How wide?** `stats.h` records `std::ilogb(v)` for nine signals in the float
 reference. A value binned at exponent `e` needs `W = e + 2` bits, so the
@@ -430,11 +440,11 @@ history, so they have no commit in the table above:
 
 ## Where this is going
 
-The intended destination is an RTL implementation with this program as its
-golden reference — same geometry in, framebuffer diffed pixel for pixel. That
-target is why several decisions here look over-careful: the byte-layout assert,
-the POD structs with flat predictable layout, the dense material table, and the
-module split that keeps each stage instantiable on its own.
+The destination is the custom GPU this was written to prepare for: an RTL
+implementation with this program as its golden reference, same geometry in,
+framebuffer diffed pixel for pixel. Understanding each stage well enough to
+implement it was the first half of that; having something trustworthy to diff
+the hardware against is the second.
 
 **The bit-width question is answered**: 27 bits for the edge accumulator at
 `s = 4`, zero integer plus 16 fractional for depth. What remains is Verilog, in

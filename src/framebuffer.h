@@ -64,4 +64,11 @@ void clear_zBuffer();
  * needs no library and the file can be verified by hand. Correctness depends on
  * the static_assert above holding.
  */
-void writeFramebufferToPPM(const std::string& filename);
+/**
+ * @return false if the file could not be opened for writing (directory
+ *         missing, permission denied, disk full at open time). The caller
+ *         must check this -- a run that cannot write frames must not report
+ *         success, since a silently empty output directory is indistinguishable
+ *         from a correct one until someone opens it.
+ */
+bool writeFramebufferToPPM(const std::string& filename);

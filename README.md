@@ -408,18 +408,20 @@ Deliberately unbuilt, roughly in the order they start to matter:
 
 | Commit | Milestone |
 |---|---|
-| `5f00633`–`282c3e3` | From a flat `vector<RGB>` to a shaded animation: PPM output, the edge function and inside test, barycentric colour, the z-buffer, the perspective divide, rotation matrices, the OBJ loader with fan triangulation, and Gouraud-shaded Lambertian lighting. |
-| `95ac44b`–`ef5f2ef` | Split from one 488-line `main.cpp` into six documented modules. |
-| `4ad373c` | Backface culling — and the discovery that `torus.obj` was wound inward on all 800 faces. |
-| `577eb64` | Perspective-correct attribute interpolation, with `rec_w` carried per vertex. |
-| `1c83808` | MTL materials, one index per triangle; torus knot and solids scene added. |
-| `3d6e6aa` | First downloaded models — Iron Man and a human figure — rather than generated ones, and the first the loader did not produce itself. |
+| `2629503`–`282c3e3` | Rotation matrices and the animation loop, then the OBJ loader with fan triangulation and bounding-box normalisation, flat Lambertian shading, and Gouraud with per-vertex normals. |
+| `c02e94d`–`a1eec19` | Split from one 528-line `main.cpp` into six documented modules. |
+| `f0dddd3` | Backface culling — and the discovery that `torus.obj` was wound inward on all 800 faces. |
+| `6866bdc` | Perspective-correct attribute interpolation, with `rec_w` carried per vertex. |
+| `7b0b283` | MTL materials, one index per triangle; torus knot and solids scene added. |
+| `a5e5538` | First downloaded models — Iron Man and a human figure — rather than generated ones, and the first the loader did not produce itself. |
 | `7f84287` | `ppmdiff`: frame-sequence comparison with an isolated-pixel count, written *before* the fixed-point path so the metric could not be tuned to flatter it. |
 | `437ecbe`–`519fac5` | Exponent histograms behind a compile-time switch, and the float rasterizer instrumented — nine signals, no change to its arithmetic. |
 | `03df162`–`c0922f5` | The fixed-point path: vertices snapped once per vertex so a shared edge is bit-identical for both triangles, `drawTriangleFixed` beside the float one rather than replacing it, selected from `argv`. |
 | `3353d5c`–`d370105` | The measurements: 45 histogram CSVs, the sub-pixel sweep across five configurations, and the bit-width report. |
 
-The stills, from the earliest days:
+The stills, from the earliest days — the framebuffer, the first filled triangle,
+the depth test and the first perspective cube. Those predate the surviving
+history, so they have no commit in the table above:
 
 | | | | |
 |---|---|---|---|

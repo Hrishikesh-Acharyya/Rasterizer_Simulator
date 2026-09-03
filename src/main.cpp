@@ -71,7 +71,12 @@ static const char* MODEL_PATH = "Media/Obj_files/IronMan.obj";
 
 /// Prefix for the histogram CSVs, WITHOUT extension. Must match MODEL_PATH and
 /// the viewport, or the data is filed under the wrong configuration.
-static const char* STATS_PREFIX = "stats/IronMan_1080p";
+///
+/// [[maybe_unused]] because STATS_DUMP expands to an unevaluated sizeof when
+/// HISTOGRAM_STATS is 0, so this is odr-used but never emitted. GCC says
+/// nothing; clang raises -Wunneeded-internal-declaration, which is an error
+/// under the -Werror build this README documents.
+[[maybe_unused]] static const char* STATS_PREFIX = "stats/IronMan_1080p";
 
 int main(int argc, char** argv)
 {

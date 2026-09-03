@@ -116,7 +116,11 @@ GRAPH_DARK  := -Gbgcolor=transparent -Nfillcolor=\#2c3440 -Ncolor=\#8fa3bd \
                -Gfontcolor=\#c2d0e0 -Gcolor=\#7b8da3
 GRAPH_DIR   := Media/Graphs
 
+# plot_sweep.py draws the sub-pixel sweep from the CSVs in stats/, so the figure
+# cannot drift from the data it reports. Standard library only: regenerating a
+# figure should not be what adds a dependency stack to a C++17 project.
 graphs:
+	python3 tools/plot_sweep.py
 	dot -Tpng -Gdpi=140 $(GRAPH_LIGHT) $(GRAPH_DIR)/include_graph.dot -o $(GRAPH_DIR)/include_graph_light.png
 	dot -Tpng -Gdpi=140 $(GRAPH_DARK)  $(GRAPH_DIR)/include_graph.dot -o $(GRAPH_DIR)/include_graph_dark.png
 	dot -Tpng -Gdpi=140 $(GRAPH_LIGHT) $(GRAPH_DIR)/work_amplification.dot -o $(GRAPH_DIR)/work_amplification_light.png

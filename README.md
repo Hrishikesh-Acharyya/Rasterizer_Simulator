@@ -410,21 +410,14 @@ Deliberately unbuilt, roughly in the order they start to matter:
 |---|---|
 | `5f00633`–`282c3e3` | From a flat `vector<RGB>` to a shaded animation: PPM output, the edge function and inside test, barycentric colour, the z-buffer, the perspective divide, rotation matrices, the OBJ loader with fan triangulation, and Gouraud-shaded Lambertian lighting. |
 | `95ac44b`–`ef5f2ef` | Split from one 488-line `main.cpp` into six documented modules. |
-| `b01b116`–`8800747` | Makefile with incremental build and video targets; `normalizationPass` returns a named `boundingBox` rather than six floats by index. |
-| `0c78fcb` | Negative and out-of-range OBJ indices resolved and validated at the loader. |
 | `4ad373c` | Backface culling — and the discovery that `torus.obj` was wound inward on all 800 faces. |
 | `577eb64` | Perspective-correct attribute interpolation, with `rec_w` carried per vertex. |
 | `1c83808` | MTL materials, one index per triangle; torus knot and solids scene added. |
-| `3d6e6aa` | First downloaded models — Iron Man and a human figure — rather than generated ones. |
+| `3d6e6aa` | First downloaded models — Iron Man and a human figure — rather than generated ones, and the first the loader did not produce itself. |
 | `7f84287` | `ppmdiff`: frame-sequence comparison with an isolated-pixel count, written *before* the fixed-point path so the metric could not be tuned to flatter it. |
-| `437ecbe` | `stats.h`/`stats.cpp`: exponent histograms behind a compile-time switch. |
-| `519fac5` | The float rasterizer instrumented — nine signals, no change to its arithmetic. |
-| `03df162` | `screenVertex` gains `xi`/`yi`: coordinates snapped once per vertex, so two triangles sharing an edge compute a bit-identical edge function and no crack opens. |
-| `7a8c851` | `drawTriangleFixed` — fixed-point coverage beside the float path, not replacing it. |
-| `c0922f5` | Rasterizer selected from `argv`, output routed per configuration. |
-| `b2101e3` | Sources into `src/`, `ppmdiff` into `tools/`. |
+| `437ecbe`–`519fac5` | Exponent histograms behind a compile-time switch, and the float rasterizer instrumented — nine signals, no change to its arithmetic. |
+| `03df162`–`c0922f5` | The fixed-point path: vertices snapped once per vertex so a shared edge is bit-identical for both triangles, `drawTriangleFixed` beside the float one rather than replacing it, selected from `argv`. |
 | `3353d5c`–`d370105` | The measurements: 45 histogram CSVs, the sub-pixel sweep across five configurations, and the bit-width report. |
-| `dcd1c97` | The ten root sources that move left behind, deleted — the build had been silently preferring the stale copies. |
 
 The stills, from the earliest days:
 

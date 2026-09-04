@@ -39,7 +39,13 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
+#include <cstring>
+#include <cerrno>
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
 #include <vector>
 
 #include "vectors.h"
@@ -116,11 +122,15 @@ int main(int argc, char** argv)
     // failure for an unhandled-exception crash -- worse, not better. A path
     // that exists as a plain file (not a directory) is the case that
     // provokes it; report that plainly and exit instead.
-    std::error_code ec;
-    std::filesystem::create_directories(frame_dir, ec);
-    if (ec) {
+    int mkdir_result;
+#ifdef _WIN32
+    mkdir_result = _mkdir(frame_dir);
+#else
+    mkdir_result = mkdir(frame_dir, 0755);
+#endif
+    if (mkdir_result != 0 && errno != EEXIST) {
         std::fprintf(stderr, "Error: could not create %s/ (%s)\n",
-                     frame_dir, ec.message().c_str());
+                     frame_dir, std::strerror(errno));
         return 1;
     }
 
